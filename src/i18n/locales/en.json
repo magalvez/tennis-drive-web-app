@@ -73,7 +73,7 @@
         "community": "Community.",
         "fullName": "Full Name",
         "namePlaceholder": "Roger Federer",
-        "emailExample": "roger@tennis.com",
+        "emailExample": "player@example.com",
         "minChars": "Min 6 characters",
         "confirmPasswordPlaceholder": "Confirm your password",
         "registerSuccess": "Account created successfully!",

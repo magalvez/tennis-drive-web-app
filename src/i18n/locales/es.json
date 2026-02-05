@@ -73,7 +73,7 @@
         "community": "Comunidad.",
         "fullName": "Nombre Completo",
         "namePlaceholder": "Rafael Nadal",
-        "emailExample": "rafa@tennis.com",
+        "emailExample": "jugador@example.com",
         "minChars": "Mín. 6 caracteres",
         "confirmPasswordPlaceholder": "Confirma tu contraseña",
         "registerSuccess": "¡Cuenta creada exitosamente!",
