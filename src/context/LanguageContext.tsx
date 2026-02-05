@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { setGlobalLocale, t as translate } from '../utils/i18n';
+import React, { createContext, useContext, useCallback, useState } from 'react';
+import { t as translate } from '../utils/i18n';
 
 type Language = 'en' | 'es';
 
@@ -19,18 +19,14 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return browserLang === 'es' ? 'es' : 'en';
     });
 
-    useEffect(() => {
-        setGlobalLocale(language);
-    }, [language]);
-
     const setLanguage = (lang: Language) => {
         setLanguageState(lang);
         localStorage.setItem('language', lang);
     };
 
-    const t = (key: string, params?: Record<string, any>) => {
-        return translate(key, params);
-    };
+    const t = useCallback((key: string, params?: Record<string, any>) => {
+        return translate(key, language, params);
+    }, [language]);
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t }}>

@@ -1,15 +1,12 @@
 import {
+    Building,
     Check,
     Globe,
-    Home,
-    Info,
     LogOut,
-    MapPin,
     RefreshCw,
     Save,
     Shield,
-    Trophy,
-    Type
+    Trophy
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -20,7 +17,6 @@ import { recalculateGlobalRankings } from '../../services/userService';
 const ConfigPage = () => {
     const { managedClubId, logout } = useAuth();
     const { language, setLanguage, t } = useLanguage();
-
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -71,22 +67,22 @@ const ConfigPage = () => {
                     withdraw: parseInt(withdrawPoints)
                 }
             });
-            showSuccess("Club configuration saved successfully!");
+            showSuccess(t('config.success') || "Club configuration saved successfully!");
         } catch (error) {
-            alert("Failed to update club.");
+            alert(t('config.error') || "Failed to update club.");
         } finally {
             setSaving(false);
         }
     };
 
     const handleRecalculateRanking = async () => {
-        if (!window.confirm("This will process all match history and update every player's XP. This may take a few moments. Continue?")) return;
+        if (!window.confirm(t('config.system.recalculateConfirm') || "This will process all match history and update every player's XP. Continue?")) return;
         setRecalculating(true);
         try {
             await recalculateGlobalRankings();
-            showSuccess("Global rankings recalculated successfully!");
+            showSuccess(t('config.system.recalculateSuccess') || "Global rankings recalculated successfully!");
         } catch (error) {
-            alert("Failed to recalculate rankings.");
+            alert(t('config.system.recalculateError') || "Failed to recalculate rankings.");
         } finally {
             setRecalculating(false);
         }
@@ -104,12 +100,12 @@ const ConfigPage = () => {
     );
 
     return (
-        <div className="space-y-10 animate-fade-in relative max-w-6xl">
+        <div className="space-y-10 animate-fade-in relative max-w-6xl mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">{t('config.title')}</h1>
-                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">Platform Settings & Club Parameters</p>
+                    <p className="text-gray-400 font-medium">{t('config.subtitle')}</p>
                 </div>
                 {successMessage && (
                     <div className="bg-tennis-green/10 border border-tennis-green/20 text-tennis-green px-6 py-3 rounded-2xl flex items-center gap-2 animate-bounce">
@@ -119,116 +115,97 @@ const ConfigPage = () => {
                 )}
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-                {/* Left Column: Essential Settings */}
-                <div className="xl:col-span-2 space-y-8">
-                    {/* Club Identity Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Main Config Form */}
+                <div className="lg:col-span-2 space-y-8">
+                    {/* Club Identity */}
                     <div className="glass p-10 rounded-[40px] border-white/5 space-y-8">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-tennis-green/10 rounded-2xl flex items-center justify-center text-tennis-green">
-                                <Home size={24} />
+                            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white">
+                                <Building size={24} />
                             </div>
-                            <h3 className="text-white text-2xl font-bold">Club Identity</h3>
+                            <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('config.identity.title')}</h2>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-3">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Club Name</label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={clubName}
-                                        onChange={(e) => setClubName(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50 pl-14 transition-all"
-                                        placeholder="Epic Tennis Academy"
-                                    />
-                                    <Type className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
-                                </div>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-3 block">{t('config.identity.name')}</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-tennis-green/50 transition-colors"
+                                    value={clubName}
+                                    onChange={(e) => setClubName(e.target.value)}
+                                />
                             </div>
-                            <div className="space-y-3">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Location</label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={clubLocation}
-                                        onChange={(e) => setClubLocation(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50 pl-14 transition-all"
-                                        placeholder="Miami, FL"
-                                    />
-                                    <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
-                                </div>
-                            </div>
-                        </div>
 
-                        <div className="space-y-3">
-                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Description (Optional)</label>
-                            <textarea
-                                value={clubDescription}
-                                onChange={(e) => setClubDescription(e.target.value)}
-                                rows={4}
-                                className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 text-white font-medium focus:outline-none focus:border-tennis-green/50 transition-all resize-none"
-                                placeholder="Tell us about your club's mission and facilities..."
-                            />
+                            <div>
+                                <label className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-3 block">{t('config.identity.location')}</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-tennis-green/50 transition-colors"
+                                    value={clubLocation}
+                                    onChange={(e) => setClubLocation(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Scoring Configuration */}
+                    {/* Default Scoring */}
                     <div className="glass p-10 rounded-[40px] border-white/5 space-y-8">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-400">
+                            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white">
                                 <Trophy size={24} />
                             </div>
-                            <h3 className="text-white text-2xl font-bold">Scoring System</h3>
+                            <div>
+                                <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('config.scoring.title')}</h2>
+                                <p className="text-gray-500 text-xs font-medium mt-1">{t('config.scoring.subtitle')}</p>
+                            </div>
                         </div>
 
-                        <p className="text-gray-500 text-sm leading-relaxed max-w-2xl font-medium">
-                            Set the base points awarded for various match outcomes. These points affect the internal club rankings and player progression.
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                            <div className="bg-white/5 p-8 rounded-[32px] border border-white/5 text-center space-y-3 transition-all hover:bg-white/[0.07]">
-                                <label className="text-tennis-green text-[10px] font-black uppercase tracking-widest">Victory</label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white/5 p-8 rounded-[32px] border border-white/5 text-center space-y-3">
+                                <label className="text-tennis-green text-[10px] font-black uppercase tracking-widest">{t('config.scoring.win')}</label>
                                 <input
                                     type="number"
+                                    className="w-full bg-transparent text-white text-5xl font-black text-center focus:outline-none"
                                     value={winPoints}
                                     onChange={(e) => setWinPoints(e.target.value)}
-                                    className="w-full bg-transparent text-white text-5xl font-black text-center focus:outline-none"
                                 />
-                                <p className="text-gray-600 text-[9px] font-bold uppercase">Points Per Match</p>
+                                <p className="text-gray-600 text-[9px] font-bold uppercase">{t('config.scoring.pointsLabel')}</p>
                             </div>
-                            <div className="bg-white/5 p-8 rounded-[32px] border border-white/5 text-center space-y-3 transition-all hover:bg-white/[0.07]">
-                                <label className="text-red-400 text-[10px] font-black uppercase tracking-widest">Defeat</label>
+                            <div className="bg-white/5 p-8 rounded-[32px] border border-white/5 text-center space-y-3">
+                                <label className="text-red-400 text-[10px] font-black uppercase tracking-widest">{t('config.scoring.loss')}</label>
                                 <input
                                     type="number"
+                                    className="w-full bg-transparent text-white text-5xl font-black text-center focus:outline-none"
                                     value={lossPoints}
                                     onChange={(e) => setLossPoints(e.target.value)}
-                                    className="w-full bg-transparent text-white text-5xl font-black text-center focus:outline-none"
                                 />
-                                <p className="text-gray-600 text-[9px] font-bold uppercase">Points Per Match</p>
+                                <p className="text-gray-600 text-[9px] font-bold uppercase">{t('config.scoring.pointsLabel')}</p>
                             </div>
-                            <div className="bg-white/5 p-8 rounded-[32px] border border-white/5 text-center space-y-3 transition-all hover:bg-white/[0.07]">
-                                <label className="text-yellow-400 text-[10px] font-black uppercase tracking-widest">Withdrawal</label>
+                            <div className="bg-white/5 p-8 rounded-[32px] border border-white/5 text-center space-y-3">
+                                <label className="text-yellow-400 text-[10px] font-black uppercase tracking-widest">{t('config.scoring.withdraw')}</label>
                                 <input
                                     type="number"
+                                    className="w-full bg-transparent text-white text-5xl font-black text-center focus:outline-none"
                                     value={withdrawPoints}
                                     onChange={(e) => setWithdrawPoints(e.target.value)}
-                                    className="w-full bg-transparent text-white text-5xl font-black text-center focus:outline-none"
                                 />
-                                <p className="text-gray-600 text-[9px] font-bold uppercase">Points Per Match</p>
+                                <p className="text-gray-600 text-[9px] font-bold uppercase">{t('config.scoring.pointsLabel')}</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Right Column: Global Actions & Account */}
+                {/* Sidebar Settings */}
                 <div className="space-y-8">
-                    {/* Global Actions */}
+                    {/* System Utilities */}
                     <div className="glass p-8 rounded-[40px] border-white/5 space-y-6">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400">
                                 <Shield size={20} />
                             </div>
-                            <h4 className="text-white font-bold">System Utilities</h4>
+                            <h4 className="text-white font-bold uppercase tracking-widest text-xs">{t('config.system.title')}</h4>
                         </div>
 
                         <button
@@ -240,65 +217,56 @@ const ConfigPage = () => {
                                 <RefreshCw size={20} />
                             </div>
                             <div className="text-left">
-                                <p className="text-white text-sm font-bold">Recalculate Ranking</p>
-                                <p className="text-gray-500 text-[10px] font-medium">Sync XP for all users</p>
+                                <p className="text-white text-sm font-bold">{t('config.system.recalculate')}</p>
+                                <p className="text-gray-500 text-[10px] font-medium">{t('config.system.recalculateDesc')}</p>
                             </div>
-                        </button>
-
-                        <div className="bg-white/5 p-6 rounded-[32px] border border-white/5 space-y-4">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-blue-400 bg-blue-400/10">
-                                    <Globe size={20} />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-white text-sm font-bold">{t('settings.language')}</p>
-                                    <p className="text-gray-500 text-[10px] font-medium">{language === 'en' ? 'English' : 'Español'}</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => setLanguage('en')}
-                                    className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${language === 'en' ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-gray-500 hover:text-white'}`}
-                                >
-                                    {t('settings.english')}
-                                </button>
-                                <button
-                                    onClick={() => setLanguage('es')}
-                                    className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${language === 'es' ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-gray-500 hover:text-white'}`}
-                                >
-                                    {t('settings.spanish')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Account Section */}
-                    <div className="glass p-8 rounded-[40px] border-white/5 space-y-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-400">
-                                <Info size={20} />
-                            </div>
-                            <h4 className="text-white font-bold">Session Settings</h4>
-                        </div>
-
-                        <button
-                            onClick={() => logout()}
-                            className="w-full p-6 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-[28px] flex items-center justify-center gap-3 text-red-500 transition-all font-black uppercase tracking-widest text-xs"
-                        >
-                            <LogOut size={18} />
-                            Logout Session
                         </button>
                     </div>
 
-                    {/* Final Save Button (Sticky/Floating effect?) */}
+                    <div className="glass p-8 rounded-[40px] border-white/5 space-y-8">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-white">
+                                <Globe size={20} />
+                            </div>
+                            <h2 className="text-white text-sm font-bold uppercase tracking-widest">{t('config.session.title')}</h2>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div>
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">{t('config.language')}</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setLanguage('en')}
+                                        className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${language === 'en' ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-gray-500 hover:text-white'}`}
+                                    >
+                                        English
+                                    </button>
+                                    <button
+                                        onClick={() => setLanguage('es')}
+                                        className={`py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${language === 'es' ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-gray-500 hover:text-white'}`}
+                                    >
+                                        Español
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => logout()}
+                                className="w-full flex items-center justify-center gap-3 py-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all"
+                            >
+                                <LogOut size={16} />
+                                {t('profile.logout')}
+                            </button>
+                        </div>
+                    </div>
+
                     <button
                         onClick={handleUpdateClub}
                         disabled={saving}
-                        className="w-full bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark py-6 rounded-[32px] font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3"
+                        className="w-full flex items-center justify-center gap-4 bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark py-6 rounded-[32px] font-black uppercase tracking-widest shadow-xl shadow-tennis-green/20 transition-all active:scale-[0.98] disabled:opacity-50"
                     >
-                        {saving ? <RefreshCw className="animate-spin" /> : <Save size={24} />}
-                        Save Club Changes
+                        {saving ? <RefreshCw className="animate-spin" /> : <Save size={20} />}
+                        {t('common.saveChanges')}
                     </button>
                 </div>
             </div>

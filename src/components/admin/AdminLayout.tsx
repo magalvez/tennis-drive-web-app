@@ -1,6 +1,8 @@
 import {
     Bell,
     CreditCard,
+    ChevronLeft,
+    ChevronRight,
     LayoutDashboard,
     LogOut,
     Menu,
@@ -12,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import logo from '../../assets/logo.png';
 import { auth } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -42,44 +45,78 @@ const AdminLayout = () => {
         <div className="min-h-screen bg-tennis-dark flex">
             {/* Sidebar */}
             <aside
-                className={`${isSidebarOpen ? 'w-72' : 'w-20'
-                    } bg-[#1f1f1f] border-r border-white/5 transition-all duration-300 flex flex-col z-30 fixed lg:static inset-y-0`}
+                className={`${isSidebarOpen ? 'w-72 translate-x-0' : 'w-20 lg:translate-x-0 -translate-x-full'
+                    } bg-[#1f1f1f] border-r border-white/5 transition-all duration-300 flex flex-col z-30 fixed lg:sticky lg:top-0 inset-y-0 lg:h-screen`}
             >
-                <div className="p-6 flex items-center justify-between">
+                <div className={`p-6 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-tennis-green rounded-xl flex items-center justify-center">
-                            <span className="text-tennis-dark font-black text-xl">T</span>
+                        <div className="w-10 h-10 overflow-hidden rounded-xl shrink-0">
+                            <img src={logo} alt="Logo" className="w-full h-full object-cover" />
                         </div>
-                        {isSidebarOpen && <span className="text-white font-bold text-lg tracking-tight">TennisDrive <span className="text-tennis-green">Admin</span></span>}
+                        {isSidebarOpen && (
+                            <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
+                                TennisDrive <span className="text-tennis-green">Admin</span>
+                            </span>
+                        )}
                     </div>
+                    {isSidebarOpen && (
+                        <button
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-all hidden lg:block"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                    )}
                 </div>
 
-                <nav className="flex-1 px-4 mt-8 space-y-2">
+                {!isSidebarOpen && (
+                    <div className="px-4 py-2 justify-center hidden lg:flex">
+                        <button
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-tennis-green transition-all"
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                    </div>
+                )}
+
+                <nav className="flex-1 px-4 mt-8 space-y-2 overflow-y-auto custom-scrollbar">
                     {menuItems.map((item) => (
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${(item.path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(item.path))
-                                ? 'bg-tennis-green text-tennis-dark font-bold'
-                                : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                            title={!isSidebarOpen ? item.label : ''}
+                            className={`flex items-center ${isSidebarOpen ? 'gap-4 px-4' : 'justify-center'} py-4 rounded-2xl transition-all ${(item.path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(item.path))
+                                ? 'bg-tennis-green text-tennis-dark font-black shadow-lg shadow-tennis-green/10'
+                                : 'text-gray-400 hover:bg-white/5 hover:text-white font-bold'
                                 }`}
                         >
-                            {item.icon}
+                            <div className="shrink-0">{item.icon}</div>
                             {isSidebarOpen && <span>{item.label}</span>}
                         </Link>
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-white/5">
+                <div className="p-4 border-t border-white/5 mt-auto">
                     <button
                         onClick={handleLogout}
-                        className="flex items-center gap-4 w-full p-4 text-gray-400 hover:text-red-400 transition-colors rounded-2xl hover:bg-red-400/5 group"
+                        className={`flex items-center ${isSidebarOpen ? 'gap-4 px-4' : 'justify-center'} w-full py-4 text-gray-400 hover:text-white transition-all rounded-2xl hover:bg-white/5 group`}
                     >
-                        <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
-                        {isSidebarOpen && <span>{t('auth.logout')}</span>}
+                        <div className="shrink-0">
+                            <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
+                        </div>
+                        {isSidebarOpen && <span className="font-bold">{t('auth.logout')}</span>}
                     </button>
                 </div>
             </aside>
+
+            {/* Mobile Overlay */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 lg:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                ></div>
+            )}
 
             {/* Main Content */}
             <main className="flex-1 flex flex-col min-h-screen relative">

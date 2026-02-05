@@ -105,7 +105,7 @@ const PlayersPage = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-white text-4xl font-extrabold uppercase tracking-widest">{t('adminTabs.players')}</h1>
-                    <p className="text-gray-400 mt-2 font-medium">Manage all registered players and their club points.</p>
+                    <p className="text-gray-400 mt-2 font-medium">{t('admin.players.subtitle')}</p>
                 </div>
                 <button
                     onClick={handleRecalculate}
@@ -160,8 +160,8 @@ const PlayersPage = () => {
 
                             <div className="flex items-center justify-between pt-4 border-t border-white/5">
                                 <div className="flex gap-2">
-                                    {player.isManual && <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-white/5 text-gray-400 rounded-md">Manual</span>}
-                                    {player.isSuspended && <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-red-500/10 text-red-500 rounded-md">Suspended</span>}
+                                    {player.isManual && <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-white/5 text-gray-400 rounded-md">{t('admin.players.status.manual')}</span>}
+                                    {player.isSuspended && <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-red-500/10 text-red-500 rounded-md">{t('admin.players.status.suspended')}</span>}
                                 </div>
                                 {player.adminNotes && <MessageCircle size={16} className="text-gray-600" />}
                             </div>
@@ -176,7 +176,7 @@ const PlayersPage = () => {
                     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={() => setSelectedPlayer(null)}></div>
                     <div className="fixed right-0 top-0 h-full w-full max-w-md bg-gray-950 border-l border-white/10 z-50 p-10 transform transition-transform duration-300 animate-slide-in-right">
                         <div className="flex justify-between items-center mb-10">
-                            <h2 className="text-white text-3xl font-black uppercase tracking-tight">Player Profile</h2>
+                            <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.players.profile.title')}</h2>
                             <button onClick={() => setSelectedPlayer(null)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
                                 <X size={20} />
                             </button>
@@ -195,7 +195,7 @@ const PlayersPage = () => {
 
                             <div className="space-y-6">
                                 <div>
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">Adjust Points</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">{t('admin.players.profile.adjustPoints')}</label>
                                     <div className="flex items-center gap-4">
                                         <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl flex items-center px-6 py-4">
                                             <input
@@ -219,8 +219,8 @@ const PlayersPage = () => {
                                     <div className="flex items-center gap-4">
                                         <ShieldAlert className={isSuspended ? 'text-red-500' : 'text-gray-600'} size={24} />
                                         <div>
-                                            <p className="text-white font-bold text-sm">Suspend Player</p>
-                                            <p className="text-gray-600 text-[10px] uppercase font-bold mt-0.5">Restriction Mode</p>
+                                            <p className="text-white font-bold text-sm">{t('admin.players.profile.suspend')}</p>
+                                            <p className="text-gray-600 text-[10px] uppercase font-bold mt-0.5">{t('admin.players.profile.restrictionMode')}</p>
                                         </div>
                                     </div>
                                     <div
@@ -232,10 +232,10 @@ const PlayersPage = () => {
                                 </div>
 
                                 <div>
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">Admin Notes</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">{t('admin.players.profile.adminNotes')}</label>
                                     <textarea
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white resize-none h-32 focus:outline-none focus:border-tennis-green/30 transition-all text-sm"
-                                        placeholder="Add private notes about this player..."
+                                        placeholder={t('admin.players.profile.phNotes')}
                                         value={adminNotes}
                                         onChange={(e) => setAdminNotes(e.target.value)}
                                     ></textarea>
@@ -249,7 +249,7 @@ const PlayersPage = () => {
                                     {saving ? <RefreshCw size={24} className="animate-spin" /> : (
                                         <>
                                             <Save size={20} />
-                                            Update Profile
+                                            {t('admin.players.profile.updateButton')}
                                         </>
                                     )}
                                 </button>

@@ -198,11 +198,11 @@ const TournamentDetailPage = () => {
                                     ? 'bg-red-500/10 text-red-500 animate-pulse'
                                     : 'bg-white/10 text-gray-400'
                                 }`}>
-                                {t(`tournaments.${tournament.status}`) || tournament.status}
+                                {t(`tournaments.status.${tournament.status}`)}
                             </span>
                         </div>
                         <h1 className="text-white text-6xl font-black tracking-tighter uppercase leading-tight">{tournament.name}</h1>
-                        <p className="text-gray-400 text-xl font-medium mt-4 max-w-2xl">Manage matches, registrations, and brackets for this tournament.</p>
+                        <p className="text-gray-400 text-xl font-medium mt-4 max-w-2xl">{t('admin.tournaments.manageHeroDesc')}</p>
                     </div>
 
                     <div className="flex flex-wrap gap-8 py-4 border-y border-white/5">
@@ -216,7 +216,7 @@ const TournamentDetailPage = () => {
                         </div>
                         <div className="flex items-center gap-3">
                             <DollarSign className="text-tennis-green" size={20} />
-                            <span className="text-white font-bold">${tournament.entryFee} Entry</span>
+                            <span className="text-white font-bold">${tournament.entryFee} {t('tournaments.entryFee')}</span>
                         </div>
                     </div>
 
@@ -227,21 +227,21 @@ const TournamentDetailPage = () => {
                             onClick={() => handleUpdateStatus('upcoming')}
                             className={`px-6 py-3 rounded-xl text-xs font-black uppercase transition-all ${tournament.status === 'upcoming' ? 'bg-tennis-green text-tennis-dark' : 'text-gray-500 hover:text-white'}`}
                         >
-                            Upcoming
+                            {t('admin.tournaments.statusActions.upcomingTitle').replace('?', '')}
                         </button>
                         <button
                             disabled={updating}
                             onClick={() => handleUpdateStatus('active')}
                             className={`px-6 py-3 rounded-xl text-xs font-black uppercase transition-all ${tournament.status === 'active' ? 'bg-red-500 text-white' : 'text-gray-500 hover:text-white'}`}
                         >
-                            Go Live
+                            {t('admin.tournaments.statusActions.activeTitle').replace('?', '')}
                         </button>
                         <button
                             disabled={updating}
                             onClick={() => handleUpdateStatus('completed')}
                             className={`px-6 py-3 rounded-xl text-xs font-black uppercase transition-all ${tournament.status === 'completed' ? 'bg-blue-500 text-white' : 'text-gray-500 hover:text-white'}`}
                         >
-                            Finalize
+                            {t('admin.tournaments.statusActions.completedTitle').replace('?', '')}
                         </button>
                     </div>
                 </div>
@@ -251,19 +251,19 @@ const TournamentDetailPage = () => {
                     <div className="glass p-6 rounded-3xl flex flex-col items-center justify-center text-center">
                         <Users className="text-tennis-green mb-3" size={24} />
                         <span className="text-white text-3xl font-black">{players.length}</span>
-                        <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">Players</span>
+                        <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">{t('admin.tournaments.playersRegistered')}</span>
                     </div>
                     <div className="glass p-6 rounded-3xl flex flex-col items-center justify-center text-center">
                         <Trophy className="text-blue-400 mb-3" size={24} />
                         <span className="text-white text-3xl font-black">{matchCount}</span>
-                        <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">Matches</span>
+                        <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">{t('admin.tournaments.matchesScheduled')}</span>
                     </div>
                     <div className="glass p-6 rounded-3xl flex flex-col col-span-2 items-center justify-center text-center border-tennis-green/20">
                         <div className="flex items-center gap-2 text-tennis-green mb-1">
                             <CheckCircle size={16} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Ready to Build Brackets</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">{t('admin.tournaments.readyDraw')}</span>
                         </div>
-                        <p className="text-gray-400 text-xs font-medium">All systems operational</p>
+                        <p className="text-gray-400 text-xs font-medium">{t('admin.tournaments.allOperational')}</p>
                     </div>
                 </div>
             </div>
@@ -285,15 +285,15 @@ const TournamentDetailPage = () => {
                     onClick={() => navigate(`/admin/tournaments/${id}/matches`)}
                 />
                 <ActionCard
-                    title="Communication Center"
-                    desc="Send push notifications to all participants."
+                    title={t('admin.tournaments.communicationCenter')}
+                    desc={t('admin.tournaments.communicationCenterDesc')}
                     icon={Bell}
                     color="orange-400"
                     onClick={() => setShowCommModal(true)}
                 />
                 <ActionCard
-                    title="Scoring Configuration"
-                    desc="Customize points and rewards for this event."
+                    title={t('admin.tournaments.scoring.title')}
+                    desc={t('admin.tournaments.scoring.subtitle')}
                     icon={Settings}
                     color="gray-400"
                     onClick={() => setShowScoringModal(true)}
@@ -308,8 +308,8 @@ const TournamentDetailPage = () => {
                         <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Blast Message</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Notify all {players.length} players</p>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.notifications.blastMsg')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.notifications.notifyCount', { count: players.length })}</p>
                                 </div>
                                 <button onClick={() => setShowCommModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
                                     <X size={24} />
@@ -318,19 +318,19 @@ const TournamentDetailPage = () => {
 
                             <div className="space-y-6">
                                 <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Title</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputTitle')}</label>
                                     <input
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-orange-500/50"
-                                        placeholder="Important Update"
+                                        placeholder={t('admin.notifications.phTitle')}
                                         value={commTitle}
                                         onChange={e => setCommTitle(e.target.value)}
                                     />
                                 </div>
                                 <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Message Content</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputBody')}</label>
                                     <textarea
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-medium focus:outline-none focus:border-orange-500/50 min-h-[120px] resize-none"
-                                        placeholder="Matches are delayed due to weather..."
+                                        placeholder={t('admin.notifications.phBody')}
                                         value={commBody}
                                         onChange={e => setCommBody(e.target.value)}
                                     />
@@ -341,7 +341,7 @@ const TournamentDetailPage = () => {
                                     className="w-full bg-orange-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-orange-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {sending ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-white"></div> : <Flag size={24} />}
-                                    Send Notification
+                                    {t('admin.notifications.sendBlast')}
                                 </button>
                             </div>
                         </div>
@@ -357,8 +357,8 @@ const TournamentDetailPage = () => {
                         <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Reward Strategy</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Tournament Scoring Overrides</p>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.scoring.rewardStrategy')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.scoring.overrides')}</p>
                                 </div>
                                 <button onClick={() => setShowScoringModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
                                     <X size={24} />
@@ -368,7 +368,7 @@ const TournamentDetailPage = () => {
                             <div className="space-y-6">
                                 <div className="grid grid-cols-1 gap-6">
                                     <div className="space-y-4">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Points for WIN</label>
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsWin')}</label>
                                         <input
                                             type="number"
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
@@ -377,7 +377,7 @@ const TournamentDetailPage = () => {
                                         />
                                     </div>
                                     <div className="space-y-4">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Points for LOSS</label>
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsLoss')}</label>
                                         <input
                                             type="number"
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
@@ -386,7 +386,7 @@ const TournamentDetailPage = () => {
                                         />
                                     </div>
                                     <div className="space-y-4">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Points for WITHDRAW</label>
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsWithdraw')}</label>
                                         <input
                                             type="number"
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
@@ -401,7 +401,7 @@ const TournamentDetailPage = () => {
                                     className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
-                                    Apply Configuration
+                                    {t('admin.tournaments.scoring.apply')}
                                 </button>
                             </div>
                         </div>

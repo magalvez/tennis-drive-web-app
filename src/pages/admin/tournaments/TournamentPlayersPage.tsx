@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../../config/firebase';
 import { useAuth } from '../../../context/AuthContext';
+import { useLanguage } from '../../../context/LanguageContext';
 import { notifyPlayerApproved, notifyPlayerRejected } from '../../../services/notificationService';
 import { completeTransaction, createTransaction, revertLatestTransactionForUser } from '../../../services/paymentService';
 import { approveRegistration, getPendingRegistrations, rejectRegistration } from '../../../services/registrationService';
@@ -37,6 +38,7 @@ const TournamentPlayersPage = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { t } = useLanguage();
 
     const [tournament, setTournament] = useState<TournamentData | null>(null);
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
@@ -121,19 +123,19 @@ const TournamentPlayersPage = () => {
             setNewPlayer({ name: '', email: '', isWildcard: false });
             await loadData();
         } catch (error) {
-            alert("Error adding player");
+            alert(t('admin.tournaments.errorAddingPlayer'));
         } finally {
             setProcessing(false);
         }
     };
 
     const handleRemovePlayer = async (playerId: string) => {
-        if (!id || !window.confirm("Remove player from tournament?")) return;
+        if (!id || !window.confirm(t('admin.tournaments.confirmRemovePlayer'))) return;
         try {
             await removePlayerFromTournament(id, playerId);
             await loadData();
         } catch (error) {
-            alert("Error removing player");
+            alert(t('admin.tournaments.errorRemovingPlayer'));
         }
     };
 
@@ -144,7 +146,7 @@ const TournamentPlayersPage = () => {
             await notifyPlayerApproved(player.uid, tournament?.name || '', player.category || 'unknown');
             await loadData();
         } catch (error) {
-            alert("Error approving registration");
+            alert(t('admin.tournaments.errorApprovingRegistration'));
         }
     };
 
@@ -159,7 +161,7 @@ const TournamentPlayersPage = () => {
             setSelectedPlayer(null);
             await loadData();
         } catch (error) {
-            alert("Error rejecting registration");
+            alert(t('admin.tournaments.errorRejectingRegistration'));
         } finally {
             setProcessing(false);
         }
@@ -187,19 +189,19 @@ const TournamentPlayersPage = () => {
             setSelectedPlayer(null);
             await loadData();
         } catch (error) {
-            alert("Error recording payment");
+            alert(t('admin.tournaments.errorRecordingPayment'));
         } finally {
             setProcessing(false);
         }
     };
 
     const handleRevertPayment = async (player: TournamentPlayer) => {
-        if (!id || !window.confirm(`Revert payment for ${player.name}?`)) return;
+        if (!id || !window.confirm(t('admin.tournaments.confirmRevertPayment', { name: player.name }))) return;
         try {
             await revertLatestTransactionForUser(id, player.uid, player.id);
             await loadData();
         } catch (error) {
-            alert("Error reverting payment");
+            alert(t('admin.tournaments.errorRevertingPayment'));
         }
     };
 
@@ -209,7 +211,7 @@ const TournamentPlayersPage = () => {
             await updatePlayerInTournament(id, player.id, { isWildcard: !player.isWildcard });
             await loadData();
         } catch (error) {
-            alert("Error updating wildcard status");
+            alert(t('admin.tournaments.errorUpdatingWildcard'));
         }
     };
 
@@ -225,7 +227,7 @@ const TournamentPlayersPage = () => {
             setSelectedPlayer(null);
             await loadData();
         } catch (error) {
-            alert("Error updating seed");
+            alert(t('admin.tournaments.errorUpdatingSeed'));
         } finally {
             setProcessing(false);
         }
@@ -239,7 +241,7 @@ const TournamentPlayersPage = () => {
             setShowRandomModal(false);
             await loadData();
         } catch (error) {
-            alert("Error auto-seeding players");
+            alert(t('admin.tournaments.errorAutoSeeding'));
         } finally {
             setProcessing(false);
         }
@@ -271,20 +273,20 @@ const TournamentPlayersPage = () => {
             setShowRandomModal(false);
             await loadData();
         } catch (error) {
-            alert("Error generating players");
+            alert(t('admin.tournaments.errorGeneratingPlayers'));
         } finally {
             setProcessing(false);
         }
     };
 
     const handleCleanup = async () => {
-        if (!id || !window.confirm("Delete ALL test players? This cannot be undone.")) return;
+        if (!id || !window.confirm(t('admin.tournaments.confirmDeleteAllTestData'))) return;
         setProcessing(true);
         try {
             await deleteManualPlayers(id);
             await loadData();
         } catch (error) {
-            alert("Error during cleanup");
+            alert(t('admin.tournaments.errorCleanup'));
         } finally {
             setProcessing(false);
         }
@@ -313,8 +315,8 @@ const TournamentPlayersPage = () => {
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <h1 className="text-white text-3xl font-black uppercase tracking-tight">{tournament?.name} - Players</h1>
-                        <p className="text-gray-500 font-bold uppercase text-xs tracking-widest mt-1">Manage Tournament Roster</p>
+                        <h1 className="text-white text-3xl font-black uppercase tracking-tight">{tournament?.name} - {t('admin.tournaments.players.title')}</h1>
+                        <p className="text-gray-500 font-bold uppercase text-xs tracking-widest mt-1">{t('admin.tournaments.manageRoster')}</p>
                     </div>
                 </div>
 
@@ -322,14 +324,14 @@ const TournamentPlayersPage = () => {
                     <button
                         onClick={handleCleanup}
                         className="p-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl border border-red-500/10 transition-all"
-                        title="Delete All Test Data"
+                        title={t('admin.tournaments.deleteAllPlayers')}
                     >
                         <Trash2 size={24} />
                     </button>
                     <button
                         onClick={() => setShowRandomModal(true)}
                         className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"
-                        title="Generate Test Players"
+                        title={t('admin.tournaments.genTestPlayers')}
                     >
                         <Users size={24} />
                     </button>
@@ -338,7 +340,7 @@ const TournamentPlayersPage = () => {
                         className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-tennis-green/20 transition-all flex items-center gap-2"
                     >
                         <Plus size={20} />
-                        Add Player
+                        {t('admin.tournaments.addPlayer')}
                     </button>
                 </div>
             </div>
@@ -348,7 +350,7 @@ const TournamentPlayersPage = () => {
                 <div className="space-y-6">
                     <h2 className="text-white text-xl font-bold uppercase tracking-tight flex items-center gap-3">
                         <Users className="text-orange-500" />
-                        Pending Registrations ({pendingRegs.length})
+                        {t('admin.tournaments.pendingRegs', { count: pendingRegs.length })}
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {pendingRegs.map(player => (
@@ -359,7 +361,7 @@ const TournamentPlayersPage = () => {
                                         <p className="text-gray-500 text-xs">{player.email}</p>
                                         {player.category && (
                                             <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded mt-2 inline-block">
-                                                Category: {player.category}
+                                                {t('admin.tournaments.category')}: {player.category ? t(`admin.tournaments.categories.${player.category}`) : t('common.none')}
                                             </span>
                                         )}
                                     </div>
@@ -369,13 +371,13 @@ const TournamentPlayersPage = () => {
                                         onClick={() => handleApprove(player)}
                                         className="flex-1 bg-tennis-green text-tennis-dark py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest hover:scale-[1.02] transition-all"
                                     >
-                                        Approve
+                                        {t('common.approve')}
                                     </button>
                                     <button
                                         onClick={() => { setSelectedPlayer(player); setShowRejectModal(true); }}
                                         className="flex-1 bg-red-500/10 text-red-500 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all"
                                     >
-                                        Reject
+                                        {t('common.reject')}
                                     </button>
                                 </div>
                             </div>
@@ -389,7 +391,7 @@ const TournamentPlayersPage = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <h2 className="text-white text-xl font-bold uppercase tracking-tight flex items-center gap-3">
                         <CheckCircle2 className="text-tennis-green" />
-                        Approved Roster ({players.length})
+                        {t('admin.tournaments.approvedRoster', { count: players.length })}
                     </h2>
 
                     {tournament?.categories && tournament.categories.length > 0 && (
@@ -398,7 +400,7 @@ const TournamentPlayersPage = () => {
                                 onClick={() => setSelectedCategory('all')}
                                 className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === 'all' ? 'bg-white text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
                             >
-                                All categories
+                                {t('common.allCategories')}
                             </button>
                             {tournament.categories.map(cat => (
                                 <button
@@ -416,8 +418,8 @@ const TournamentPlayersPage = () => {
                 <div className="grid grid-cols-1 gap-4">
                     {filteredPlayers.length === 0 ? (
                         <div className="glass p-20 rounded-[40px] border-dashed border-2 border-white/10 flex flex-col items-center justify-center text-center">
-                            <h3 className="text-white text-xl font-bold">No players found</h3>
-                            <p className="text-gray-500 mt-2">Try adjusting your filters or add players manually.</p>
+                            <h3 className="text-white text-xl font-bold">{t('admin.tournaments.noPlayers')}</h3>
+                            <p className="text-gray-500 mt-2">{t('admin.tournaments.noPlayersDesc')}</p>
                         </div>
                     ) : (
                         filteredPlayers.map(player => (
@@ -436,20 +438,20 @@ const TournamentPlayersPage = () => {
                                                 </span>
                                             )}
                                             {player.isManual && (
-                                                <span className="text-gray-600 text-[8px] font-black uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">Test</span>
+                                                <span className="text-gray-600 text-[8px] font-black uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">{t('common.test')}</span>
                                             )}
                                         </div>
-                                        <p className="text-gray-500 text-xs">{player.email || 'No email provided'}</p>
+                                        <p className="text-gray-500 text-xs">{player.email || t('admin.tournaments.noEmail')}</p>
                                         <div className="flex items-center gap-4 mt-2">
                                             <span className="text-[10px] font-black uppercase tracking-widest text-tennis-green bg-tennis-green/5 px-2 py-0.5 rounded border border-tennis-green/10">
-                                                {player.category || 'No Category'}
+                                                {player.category || t('admin.tournaments.noCategory')}
                                             </span>
                                             <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${player.paymentStatus === 'paid' ? 'text-blue-400 bg-blue-500/5 border-blue-500/10' : 'text-gray-600 bg-white/5 border-white/5'}`}>
-                                                {player.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                                                {player.paymentStatus === 'paid' ? t('common.paid') : t('common.unpaid')}
                                             </span>
                                             {player.seed && (
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10">
-                                                    Seed #{player.seed}
+                                                    {t('admin.tournaments.seedNum', { num: player.seed })}
                                                 </span>
                                             )}
                                         </div>
@@ -460,14 +462,14 @@ const TournamentPlayersPage = () => {
                                     <button
                                         onClick={() => { setSelectedPlayer(player); setSeedValue(player.seed?.toString() || ''); setShowSeedModal(true); }}
                                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.seed ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-gray-700 hover:text-white'}`}
-                                        title="Assign Seed"
+                                        title={t('admin.tournaments.assignSeed')}
                                     >
                                         <ShieldAlert size={20} />
                                     </button>
                                     <button
                                         onClick={() => handleToggleWildcard(player)}
                                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.isWildcard ? 'bg-yellow-500/10 text-yellow-500' : 'bg-white/5 text-gray-700 hover:text-white'}`}
-                                        title="Toggle Wildcard"
+                                        title={t('admin.tournaments.toggleWildcard')}
                                     >
                                         <Crown size={20} />
                                     </button>
@@ -475,7 +477,7 @@ const TournamentPlayersPage = () => {
                                         <button
                                             onClick={() => { setSelectedPlayer(player); setShowPaymentModal(true); }}
                                             className="w-12 h-12 bg-white/5 hover:bg-tennis-green hover:text-tennis-dark rounded-2xl flex items-center justify-center text-gray-500 transition-all border border-white/5 hover:border-tennis-green"
-                                            title="Record Payment"
+                                            title={t('admin.tournaments.recordPayment')}
                                         >
                                             <DollarSign size={20} />
                                         </button>
@@ -483,7 +485,7 @@ const TournamentPlayersPage = () => {
                                         <button
                                             onClick={() => handleRevertPayment(player)}
                                             className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center border border-blue-500/10 hover:bg-blue-500/20 transition-all"
-                                            title="Revert Payment"
+                                            title={t('admin.tournaments.revertPayment')}
                                         >
                                             <RefreshCw size={20} />
                                         </button>
@@ -491,7 +493,7 @@ const TournamentPlayersPage = () => {
                                     <button
                                         onClick={() => handleRemovePlayer(player.id)}
                                         className="w-12 h-12 bg-white/5 hover:bg-red-500/20 text-gray-700 hover:text-red-500 rounded-2xl flex items-center justify-center transition-all border border-white/5 hover:border-red-500/20"
-                                        title="Remove Player"
+                                        title={t('admin.tournaments.removePlayer')}
                                     >
                                         <Trash2 size={20} />
                                     </button>
@@ -509,8 +511,8 @@ const TournamentPlayersPage = () => {
                     <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-950 border-l border-white/10 z-50 p-12 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right">
                         <div className="flex justify-between items-center mb-10">
                             <div>
-                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">Add Player</h2>
-                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Manual Enrollment</p>
+                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.addPlayer')}</h2>
+                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.manualEnroll')}</p>
                             </div>
                             <button onClick={() => setShowAddModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
                                 <X size={24} />
@@ -519,25 +521,25 @@ const TournamentPlayersPage = () => {
 
                         <form onSubmit={handleAddPlayer} className="space-y-8">
                             <div className="space-y-4">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Full Name</label>
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.fullName')}</label>
                                 <input
                                     required
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
                                     value={newPlayer.name}
                                     onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })}
-                                    placeholder="John Doe"
+                                    placeholder={t('admin.tournaments.phFullName')}
                                 />
                             </div>
                             <div className="space-y-4">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Email (Optional)</label>
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.emailOptional')}</label>
                                 <input
                                     type="email"
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
                                     value={newPlayer.email}
                                     onChange={e => setNewPlayer({ ...newPlayer, email: e.target.value })}
-                                    placeholder="john@example.com"
+                                    placeholder={t('admin.tournaments.phEmail')}
                                 />
-                                <p className="text-[10px] text-gray-600 italic">If email matches an existing user, they will be linked.</p>
+                                <p className="text-[10px] text-gray-600 italic">{t('admin.tournaments.emailEmailHint')}</p>
                             </div>
 
                             <div
@@ -547,8 +549,8 @@ const TournamentPlayersPage = () => {
                                 <div className="flex items-center gap-4">
                                     <Crown className={newPlayer.isWildcard ? 'text-yellow-500' : 'text-gray-500'} />
                                     <div>
-                                        <p className={`font-bold text-sm uppercase tracking-tight ${newPlayer.isWildcard ? 'text-white' : 'text-gray-500'}`}>Wildcard Entry</p>
-                                        <p className="text-[10px] text-gray-600">Golden ticket registration</p>
+                                        <p className={`font-bold text-sm uppercase tracking-tight ${newPlayer.isWildcard ? 'text-white' : 'text-gray-500'}`}>{t('admin.tournaments.wildcardEntry')}</p>
+                                        <p className="text-[10px] text-gray-600">{t('admin.tournaments.goldenTicket')}</p>
                                     </div>
                                 </div>
                                 <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${newPlayer.isWildcard ? 'border-yellow-500 bg-yellow-500' : 'border-gray-800'}`}>
@@ -561,7 +563,7 @@ const TournamentPlayersPage = () => {
                                 className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-10"
                             >
                                 {processing ? <RefreshCw className="animate-spin" /> : <UserPlus size={24} />}
-                                Enroll Player
+                                {t('admin.tournaments.enrollPlayer')}
                             </button>
                         </form>
                     </div>
@@ -576,8 +578,8 @@ const TournamentPlayersPage = () => {
                         <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Entry Fee</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Record Manual Payment</p>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.entryFeeLabel')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.recordManualPayment')}</p>
                                 </div>
                                 <button onClick={() => setShowPaymentModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
                                     <X size={24} />
@@ -585,13 +587,13 @@ const TournamentPlayersPage = () => {
                             </div>
 
                             <div className="bg-white/5 rounded-3xl p-6 text-center">
-                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">Player</p>
+                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('admin.tournaments.player')}</p>
                                 <p className="text-white text-2xl font-black">{selectedPlayer.name}</p>
                             </div>
 
                             <form onSubmit={handlePayment} className="space-y-6">
                                 <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Amount ($)</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.amount')} ($)</label>
                                     <input
                                         required
                                         type="number"
@@ -601,12 +603,12 @@ const TournamentPlayersPage = () => {
                                     />
                                 </div>
                                 <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Internal Note</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.internalNote')}</label>
                                     <input
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
                                         value={paymentInfo.note}
                                         onChange={e => setPaymentInfo({ ...paymentInfo, note: e.target.value })}
-                                        placeholder="Cash, Zelle, Bank transfer..."
+                                        placeholder={t('admin.tournaments.phInternalNote')}
                                     />
                                 </div>
                                 <button
@@ -614,7 +616,7 @@ const TournamentPlayersPage = () => {
                                     className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {processing ? <RefreshCw className="animate-spin" /> : <CheckCircle2 size={24} />}
-                                    Confirm Payment
+                                    {t('admin.tournaments.confirmPayment')}
                                 </button>
                             </form>
                         </div>
@@ -630,23 +632,23 @@ const TournamentPlayersPage = () => {
                         <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-red-500 text-3xl font-black uppercase tracking-tight">Reject</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Registration Denial</p>
+                                    <h2 className="text-red-500 text-3xl font-black uppercase tracking-tight">{t('common.reject')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.registrationDenial')}</p>
                                 </div>
                                 <button onClick={() => setShowRejectModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
                                     <X size={24} />
                                 </button>
                             </div>
 
-                            <p className="text-gray-400">Denying registration for <span className="font-bold text-white">{selectedPlayer.name}</span>. Please provide a reason that will be sent to the player.</p>
+                            <p className="text-gray-400">{t('admin.tournaments.denyingRegFor')} <span className="font-bold text-white">{selectedPlayer.name}</span>. {t('admin.tournaments.provideReasonSent')}</p>
 
                             <div className="space-y-4">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Reason for Rejection</label>
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.reasonRejection')}</label>
                                 <textarea
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-red-500/50 min-h-[120px]"
                                     value={rejectReason}
                                     onChange={e => setRejectReason(e.target.value)}
-                                    placeholder="Inaccurate category, missing information, etc."
+                                    placeholder={t('admin.tournaments.phReasonRejection')}
                                 />
                             </div>
 
@@ -656,7 +658,7 @@ const TournamentPlayersPage = () => {
                                 className="w-full bg-red-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-red-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                             >
                                 {processing ? <RefreshCw className="animate-spin" /> : <X size={24} />}
-                                Confirm Rejection
+                                {t('admin.tournaments.confirmRejection')}
                             </button>
                         </div>
                     </div>
@@ -671,8 +673,8 @@ const TournamentPlayersPage = () => {
                         <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Test Suite</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Generate Random Players</p>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.testSuite')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.genRandomPlayers')}</p>
                                 </div>
                                 <button onClick={() => setShowRandomModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
                                     <X size={24} />
@@ -681,7 +683,7 @@ const TournamentPlayersPage = () => {
 
                             <div className="space-y-6">
                                 <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Number of Players</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.numPlayersLabel')}</label>
                                     <input
                                         type="number"
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl text-center focus:outline-none focus:border-blue-500/50"
@@ -691,7 +693,7 @@ const TournamentPlayersPage = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Assign to Category</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.assignToCategory')}</label>
                                     <div className="grid grid-cols-2 gap-2">
                                         {CATEGORY_ORDER.map(cat => (
                                             <button
@@ -711,18 +713,18 @@ const TournamentPlayersPage = () => {
                                     className="w-full bg-blue-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {processing ? <RefreshCw className="animate-spin" /> : <Users size={24} />}
-                                    Run Generator
+                                    {t('admin.tournaments.runGenerator')}
                                 </button>
 
                                 <div className="pt-4 border-t border-white/5 space-y-4">
-                                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">Batch Operations</p>
+                                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">{t('admin.tournaments.batchOperations')}</p>
                                     <button
                                         onClick={handleAutoSeed}
                                         disabled={processing}
                                         className="w-full bg-white/5 hover:bg-white/10 text-white py-4 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/5"
                                     >
                                         <ShieldAlert size={16} />
-                                        Auto-Seed by Club Points
+                                        {t('admin.tournaments.autoSeedClub')}
                                     </button>
                                 </div>
                             </div>
@@ -739,7 +741,7 @@ const TournamentPlayersPage = () => {
                         <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Assign Seed</h2>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.assignSeed')}</h2>
                                     <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{selectedPlayer?.name}</p>
                                 </div>
                                 <button onClick={() => setShowSeedModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
@@ -749,11 +751,11 @@ const TournamentPlayersPage = () => {
 
                             <form onSubmit={handleUpdateSeed} className="space-y-6">
                                 <div className="space-y-4">
-                                    <label className="text-gray-400 text-xs font-bold uppercase tracking-widest ml-1">Tournament Seed (Leave blank to remove)</label>
+                                    <label className="text-gray-400 text-xs font-bold uppercase tracking-widest ml-1">{t('admin.tournaments.seedInputLabel')}</label>
                                     <input
                                         type="number"
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-white text-3xl font-black text-center focus:outline-none focus:border-tennis-green/50 transition-all"
-                                        placeholder="e.g. 1"
+                                        placeholder={t('admin.tournaments.phSeedInput')}
                                         value={seedValue}
                                         onChange={e => setSeedValue(e.target.value)}
                                         autoFocus
@@ -766,7 +768,7 @@ const TournamentPlayersPage = () => {
                                     className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {processing ? <RefreshCw className="animate-spin" /> : <Check size={24} />}
-                                    Save Seed Assignment
+                                    {t('admin.tournaments.saveSeedAssignment')}
                                 </button>
                             </form>
                         </div>

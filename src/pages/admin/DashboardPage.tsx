@@ -135,7 +135,7 @@ const DashboardPage = () => {
         <div className="space-y-10 animate-fade-in">
             <div>
                 <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">{t('adminTabs.dashboard')}</h1>
-                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">Club Performance Overview</p>
+                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{t('dashboard.performanceOverview')}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -159,7 +159,7 @@ const DashboardPage = () => {
                 />
                 <StatCard
                     icon={<AlertCircle size={24} />}
-                    label="Active Events"
+                    label={t('dashboard.activeEvents')}
                     value={tournaments.filter(t => t.status === 'active').length}
                     color="yellow"
                 />
@@ -169,16 +169,16 @@ const DashboardPage = () => {
                 {/* Pending registrations */}
                 <div className="xl:col-span-2 space-y-6">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-white text-xl font-bold uppercase tracking-tight">Pending Registrations</h2>
+                        <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('dashboard.pendingRegistrations')}</h2>
                         <span className="bg-orange-500/10 text-orange-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-orange-500/10">
-                            {pendingRegs.length} Attention Needed
+                            {pendingRegs.length} {t('dashboard.attentionNeeded')}
                         </span>
                     </div>
 
                     {pendingRegs.length === 0 ? (
                         <div className="glass p-12 rounded-[32px] border-white/5 flex flex-col items-center justify-center text-center opacity-40">
                             <CheckCircle2 size={40} className="text-gray-500 mb-4" />
-                            <p className="text-gray-500 font-bold uppercase text-xs tracking-widest">Inbox Zero</p>
+                            <p className="text-gray-500 font-bold uppercase text-xs tracking-widest">{t('dashboard.inboxZero')}</p>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -199,7 +199,7 @@ const DashboardPage = () => {
                                             disabled={processing}
                                             className="px-6 py-2.5 bg-tennis-green text-tennis-dark rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:scale-105"
                                         >
-                                            Approve
+                                            {t('admin.tournaments.approveRegistration')}
                                         </button>
                                         <button
                                             onClick={() => handleReject(reg)}
@@ -217,7 +217,7 @@ const DashboardPage = () => {
 
                 {/* Recent Activity */}
                 <div className="space-y-6">
-                    <h2 className="text-white text-xl font-bold uppercase tracking-tight">Recent Activity</h2>
+                    <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('dashboard.recentActivity')}</h2>
                     <div className="glass rounded-[32px] border-white/5 overflow-hidden">
                         <div className="p-2 space-y-1">
                             {recentActivities.map((activity, i) => (
@@ -232,7 +232,7 @@ const DashboardPage = () => {
                                             <Clock size={8} />
                                             {activity.createdAt?.seconds
                                                 ? new Date(activity.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                : 'Just now'
+                                                : t('dashboard.justNow')
                                             }
                                         </div>
                                     </div>

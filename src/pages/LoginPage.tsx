@@ -1,7 +1,7 @@
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { LogIn } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import logo from '../assets/logo.png';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -53,9 +53,7 @@ const LoginPage = () => {
 
             <div className="w-full max-w-md glass p-10 rounded-3xl z-10">
                 <div className="flex flex-col items-center mb-10">
-                    <div className="w-16 h-16 bg-tennis-green rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-tennis-green/20">
-                        <LogIn className="text-tennis-dark" size={32} />
-                    </div>
+                    <img src={logo} alt="Tennis Drive" className="w-20 h-20 rounded-[24px] mb-6 shadow-xl shadow-tennis-green/20" />
                     <h1 className="text-white text-3xl font-extrabold text-center uppercase tracking-tight">{t('auth.signIn')}</h1>
                     <p className="text-gray-400 mt-2 font-medium">{t('auth.welcomeBack')}</p>
                 </div>

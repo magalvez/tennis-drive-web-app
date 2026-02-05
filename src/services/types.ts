@@ -28,7 +28,7 @@ export interface TournamentData {
     clubId?: string;
     winnerId?: string;
     courtType?: 'hard' | 'clay' | 'grass';
-    image?: string;
+    image?: string | null;
     scoringConfig?: ScoringConfig;
     categories?: TournamentCategory[];
 }

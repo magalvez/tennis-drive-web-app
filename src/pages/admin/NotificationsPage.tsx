@@ -8,10 +8,12 @@ import {
     X
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import type { UserWithToken } from '../../services/notificationService';
 import { getUsersWithTokens, sendPushNotification, sendPushNotificationsBatch } from '../../services/notificationService';
 
 const NotificationsPage = () => {
+    const { t } = useLanguage();
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [loading, setLoading] = useState(false);
@@ -38,6 +40,7 @@ const NotificationsPage = () => {
             setFilteredUsers(data);
         } catch (error) {
             console.error(error);
+            alert(t('admin.notifications.errors.fetchUsers'));
         } finally {
             setFetchingUsers(false);
         }
@@ -54,7 +57,7 @@ const NotificationsPage = () => {
 
     const handleSend = async () => {
         if (!title.trim() || !body.trim()) {
-            alert("Title and Message are required");
+            alert(t('admin.notifications.errors.required'));
             return;
         }
 
@@ -62,21 +65,21 @@ const NotificationsPage = () => {
         try {
             if (selectedUser) {
                 await sendPushNotification(selectedUser.pushToken, title, body);
-                alert(`Direct notification sent to ${selectedUser.displayName}`);
+                alert(t('admin.notifications.successSent', { name: selectedUser.displayName }));
             } else {
                 const tokens = allUsers.length > 0 ? allUsers.map(u => u.pushToken) : (await getUsersWithTokens()).map(u => u.pushToken);
                 if (tokens.length === 0) {
-                    alert("No active audience found (no users with push tokens).");
+                    alert(t('admin.notifications.errors.noAudience'));
                     return;
                 }
                 await sendPushNotificationsBatch(tokens, title, body);
-                alert(`Broadcast sent to ${tokens.length} users successfully!`);
+                alert(t('admin.notifications.successBroadcast', { count: tokens.length }));
             }
             setTitle('');
             setBody('');
             setSelectedUser(null);
         } catch (error) {
-            alert("Failed to send notification");
+            alert(t('admin.notifications.errors.failed'));
         } finally {
             setLoading(false);
         }
@@ -86,8 +89,8 @@ const NotificationsPage = () => {
         <div className="max-w-4xl mx-auto space-y-10 animate-fade-in pb-20">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
-                    <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">Notification Center</h1>
-                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">Broadcast Alerts & Direct Messages</p>
+                    <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">{t('admin.notifications.title')}</h1>
+                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{t('admin.notifications.broadcastAlerts')}</p>
                 </div>
             </div>
 
@@ -97,13 +100,13 @@ const NotificationsPage = () => {
                     onClick={() => setSelectedUser(null)}
                     className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!selectedUser ? 'bg-tennis-green text-tennis-dark' : 'text-gray-500 hover:text-white'}`}
                 >
-                    Broadcast
+                    {t('admin.notifications.broadcast')}
                 </button>
                 <button
                     onClick={() => setShowUserSelector(true)}
                     className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedUser ? 'bg-blue-500 text-white' : 'text-gray-500 hover:text-white'}`}
                 >
-                    {selectedUser ? `To: ${selectedUser.displayName}` : 'Specific Player'}
+                    {selectedUser ? `${t('admin.notifications.to')} ${selectedUser.displayName}` : t('admin.notifications.specificUser')}
                 </button>
             </div>
 
@@ -116,11 +119,11 @@ const NotificationsPage = () => {
                         </div>
                         <div>
                             <h2 className="text-white text-2xl font-black uppercase tracking-tight">
-                                {selectedUser ? "Direct Message" : "Broadcast Alert"}
+                                {selectedUser ? t('admin.notifications.directMsg') : t('admin.notifications.broadcastMsg')}
                             </h2>
                             <p className="text-gray-500 text-xs font-bold uppercase tracking-widest leading-none mt-1">
-                                Sending to: <span className={selectedUser ? "text-blue-400" : "text-tennis-green"}>
-                                    {selectedUser ? selectedUser.displayName : "Global Audience"}
+                                {t('admin.notifications.to')} <span className={selectedUser ? "text-blue-400" : "text-tennis-green"}>
+                                    {selectedUser ? selectedUser.displayName : t('admin.notifications.allPlayers')}
                                 </span>
                             </p>
                         </div>
@@ -128,19 +131,19 @@ const NotificationsPage = () => {
 
                     <div className="space-y-6">
                         <div className="space-y-3">
-                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Push Title</label>
+                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputTitle')}</label>
                             <input
                                 className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-white/20 transition-all"
-                                placeholder="Finals starting soon! 🎾"
+                                placeholder={t('admin.notifications.phTitle')}
                                 value={title}
                                 onChange={e => setTitle(e.target.value)}
                             />
                         </div>
                         <div className="space-y-3">
-                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Message Content</label>
+                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputBody')}</label>
                             <textarea
                                 className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 text-white font-medium focus:outline-none focus:border-white/20 transition-all min-h-[160px] resize-none"
-                                placeholder="Don't miss the upcoming matches at Center Court..."
+                                placeholder={t('admin.notifications.phBody')}
                                 value={body}
                                 onChange={e => setBody(e.target.value)}
                             />
@@ -155,7 +158,7 @@ const NotificationsPage = () => {
                         {loading ? <RefreshCw className="animate-spin" size={24} /> : (
                             <>
                                 <Send size={24} />
-                                {selectedUser ? "Direct Send" : "Send Broadcast"}
+                                {selectedUser ? t('admin.notifications.sendUser') : t('admin.notifications.sendBroadcast')}
                             </>
                         )}
                     </button>
@@ -166,20 +169,20 @@ const NotificationsPage = () => {
                     <div className="glass p-8 rounded-[32px] border-dashed border-2 border-white/5 space-y-6">
                         <h3 className="text-white font-bold uppercase tracking-tight flex items-center gap-2">
                             <Check size={18} className="text-tennis-green" />
-                            Push Best Practices
+                            {t('admin.notifications.bestPractices')}
                         </h3>
                         <ul className="space-y-4 text-xs font-medium text-gray-500">
                             <li className="flex gap-3">
                                 <span className="text-tennis-green font-black">01</span>
-                                Keep it short and actionable. The goal is to get players back into the app.
+                                {t('admin.notifications.practice01')}
                             </li>
                             <li className="flex gap-3">
                                 <span className="text-tennis-green font-black">02</span>
-                                Use emojis sparingly but effectively to increase click-through rates.
+                                {t('admin.notifications.practice02')}
                             </li>
                             <li className="flex gap-3">
                                 <span className="text-tennis-green font-black">03</span>
-                                Global broadcasts reach EVERY player who has enabled notifications. Use wisely.
+                                {t('admin.notifications.practice03')}
                             </li>
                         </ul>
                     </div>
@@ -194,10 +197,10 @@ const NotificationsPage = () => {
                                     <div className="w-4 h-4 bg-tennis-green rounded flex items-center justify-center text-[10px] text-tennis-dark font-black">T</div>
                                     <span className="text-[10px] font-bold">Tennis Drive</span>
                                 </div>
-                                <span className="text-[10px]">now</span>
+                                <span className="text-[10px]">{t('admin.activity.justNow')}</span>
                             </div>
-                            <p className="text-white font-bold text-xs leading-none">{title || "Your notification title..."}</p>
-                            <p className="text-gray-300 text-[10px] leading-tight line-clamp-2">{body || "The message content will appear here globally on your users' lock screens."}</p>
+                            <p className="text-white font-bold text-xs leading-none">{title || t('admin.notifications.phTitle')}</p>
+                            <p className="text-gray-300 text-[10px] leading-tight line-clamp-2">{body || t('admin.notifications.phBody')}</p>
                         </div>
 
                         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/10 rounded-full" />
@@ -212,8 +215,8 @@ const NotificationsPage = () => {
                     <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-gray-950 border-l border-white/10 z-50 p-12 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right">
                         <div className="flex justify-between items-center mb-10">
                             <div>
-                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">Select Player</h2>
-                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Direct Message Targeted</p>
+                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.notifications.selectPlayer')}</h2>
+                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.notifications.specificUser')}</p>
                             </div>
                             <button onClick={() => setShowUserSelector(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
                                 <X size={24} />
@@ -224,7 +227,7 @@ const NotificationsPage = () => {
                             <Search size={20} className="text-gray-500" />
                             <input
                                 className="bg-transparent border-none outline-none text-white font-bold w-full"
-                                placeholder="Search by name or email..."
+                                placeholder={t('admin.notifications.phSearch')}
                                 value={searchQuery}
                                 onChange={e => handleSearch(e.target.value)}
                             />
