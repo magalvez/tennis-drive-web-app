@@ -6,6 +6,7 @@ import {
     updateDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { getTournamentById, getTournamentMatches, getTournamentPlayers } from './tournamentService';
 import type { GroupStanding, TournamentCategory, TournamentGroup } from './types';
 
 export const createGroup = async (
@@ -90,7 +91,6 @@ export const unfinalizeGroup = async (
 
 export const getTournamentStandings = async (tournamentId: string, category?: TournamentCategory): Promise<GroupStanding[]> => {
     try {
-        const { getTournamentMatches, getTournamentPlayers, getTournamentById } = await import('./tournamentService') as any;
         const [matches, players, tournament] = await Promise.all([
             getTournamentMatches(tournamentId),
             getTournamentPlayers(tournamentId),

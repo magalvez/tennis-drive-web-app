@@ -10,6 +10,7 @@ import {
     where
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { getTournamentById } from './tournamentService';
 import type { Match, TournamentCategory } from './types';
 
 export type BracketRound = 'round_of_128' | 'round_of_64' | 'round_of_32' | 'round_of_16' | 'quarter_finals' | 'semi_finals' | 'final';
@@ -59,7 +60,6 @@ const getSeededPositions = (count: number): number[] => {
 
 export const generateMainDraw = async (tournamentId: string, players: any[], category?: TournamentCategory) => {
     try {
-        const { getTournamentById } = await import('./tournamentService');
         const tournament = await getTournamentById(tournamentId);
         if (!tournament) throw new Error("Tournament not found");
 

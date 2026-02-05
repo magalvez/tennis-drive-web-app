@@ -2,6 +2,8 @@ import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, increment, orderBy
 import { db } from '../config/firebase';
 import { formatMatchScore } from '../utils/scoring';
 import { logActivity } from './activityService';
+import { createGroup } from './groupService';
+import { advanceWinner } from './bracketService';
 import type { Match, TournamentCategory, TournamentData, TournamentPlayer } from './types';
 
 export const CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'rookie'];
@@ -169,7 +171,6 @@ export const assignGroupsToPlayers = async (tournamentId: string, numberOfGroups
         await batch.commit();
 
         // 4. Create Group Documents
-        const { createGroup } = await import('./groupService');
         for (const [groupName, playerIds] of Object.entries(groupPlayerMap)) {
             await createGroup(tournamentId, groupName, playerIds, category);
         }
@@ -314,7 +315,6 @@ export const saveMatchScoreByAdmin = async (
         }
 
         if (matchData.nextMatchId && data.winnerId) {
-            const { advanceWinner } = await import('./bracketService');
             await advanceWinner(tournamentId, matchId, data.winnerId);
         }
     } catch (error) {
