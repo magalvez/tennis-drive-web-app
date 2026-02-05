@@ -1,0 +1,780 @@
+import { addDoc, collection, getDocs, query, Timestamp, where } from 'firebase/firestore';
+import {
+    ArrowLeft,
+    Check,
+    CheckCircle2,
+    Crown,
+    DollarSign,
+    Plus,
+    RefreshCw,
+    ShieldAlert,
+    Trash2,
+    UserPlus,
+    Users,
+    X
+} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { db } from '../../../config/firebase';
+import { useAuth } from '../../../context/AuthContext';
+import { notifyPlayerApproved, notifyPlayerRejected } from '../../../services/notificationService';
+import { completeTransaction, createTransaction, revertLatestTransactionForUser } from '../../../services/paymentService';
+import { approveRegistration, getPendingRegistrations, rejectRegistration } from '../../../services/registrationService';
+import {
+    addPlayerToTournament,
+    autoSeedPlayers,
+    CATEGORY_ORDER,
+    deleteManualPlayers,
+    getTournamentById,
+    getTournamentPlayers,
+    removePlayerFromTournament,
+    updatePlayerInTournament,
+    updatePlayerSeed
+} from '../../../services/tournamentService';
+import type { TournamentCategory, TournamentData, TournamentPlayer } from '../../../services/types';
+
+const TournamentPlayersPage = () => {
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const { user } = useAuth();
+
+    const [tournament, setTournament] = useState<TournamentData | null>(null);
+    const [players, setPlayers] = useState<TournamentPlayer[]>([]);
+    const [pendingRegs, setPendingRegs] = useState<TournamentPlayer[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [processing, setProcessing] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState<TournamentCategory | 'all'>('all');
+
+    // Modals
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showRandomModal, setShowRandomModal] = useState(false);
+    const [showRejectModal, setShowRejectModal] = useState(false);
+
+    // Form States
+    const [newPlayer, setNewPlayer] = useState({ name: '', email: '', isWildcard: false });
+    const [paymentInfo, setPaymentInfo] = useState({ amount: '50', note: '' });
+    const [selectedPlayer, setSelectedPlayer] = useState<TournamentPlayer | null>(null);
+    const [rejectReason, setRejectReason] = useState('');
+    const [randomCount, setRandomCount] = useState('5');
+    const [randomCategory, setRandomCategory] = useState<TournamentCategory | null>(null);
+    const [showSeedModal, setShowSeedModal] = useState(false);
+    const [seedValue, setSeedValue] = useState('');
+
+    const loadData = useCallback(async () => {
+        if (!id) return;
+        setLoading(true);
+        try {
+            const [tData, pData, rData] = await Promise.all([
+                getTournamentById(id),
+                getTournamentPlayers(id),
+                getPendingRegistrations(id)
+            ]);
+            setTournament(tData);
+            setPlayers(pData);
+            setPendingRegs(rData);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    const handleAddPlayer = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !newPlayer.name.trim() || processing) return;
+        setProcessing(true);
+        try {
+            let userUid = `manual_${Date.now()}`;
+            // Optional: Lookup user by email
+            if (newPlayer.email.trim()) {
+                const q = query(collection(db, 'users'), where('email', '==', newPlayer.email.trim()));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    userUid = snap.docs[0].id;
+                } else {
+                    const userRef = await addDoc(collection(db, 'users'), {
+                        displayName: newPlayer.name,
+                        email: newPlayer.email.trim(),
+                        createdAt: Timestamp.now(),
+                        isManual: true,
+                        role: 'player'
+                    });
+                    userUid = userRef.id;
+                }
+            }
+
+            await addPlayerToTournament(id, {
+                name: newPlayer.name,
+                email: newPlayer.email,
+                uid: userUid,
+                isWildcard: newPlayer.isWildcard,
+                isManual: true,
+                registrationStatus: 'approved'
+            });
+
+            setShowAddModal(false);
+            setNewPlayer({ name: '', email: '', isWildcard: false });
+            await loadData();
+        } catch (error) {
+            alert("Error adding player");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleRemovePlayer = async (playerId: string) => {
+        if (!id || !window.confirm("Remove player from tournament?")) return;
+        try {
+            await removePlayerFromTournament(id, playerId);
+            await loadData();
+        } catch (error) {
+            alert("Error removing player");
+        }
+    };
+
+    const handleApprove = async (player: TournamentPlayer) => {
+        if (!id || !user?.uid) return;
+        try {
+            await approveRegistration(id, player.id, user.uid);
+            await notifyPlayerApproved(player.uid, tournament?.name || '', player.category || 'unknown');
+            await loadData();
+        } catch (error) {
+            alert("Error approving registration");
+        }
+    };
+
+    const handleReject = async () => {
+        if (!id || !selectedPlayer || !user?.uid || !rejectReason.trim()) return;
+        setProcessing(true);
+        try {
+            await rejectRegistration(id, selectedPlayer.id, user.uid, rejectReason);
+            await notifyPlayerRejected(selectedPlayer.uid, tournament?.name || '', rejectReason);
+            setShowRejectModal(false);
+            setRejectReason('');
+            setSelectedPlayer(null);
+            await loadData();
+        } catch (error) {
+            alert("Error rejecting registration");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handlePayment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !selectedPlayer || processing) return;
+        setProcessing(true);
+        try {
+            const amount = parseFloat(paymentInfo.amount);
+            const txId = await createTransaction({
+                userId: selectedPlayer.uid || 'guest',
+                userName: selectedPlayer.name,
+                amount,
+                type: 'entry_fee',
+                referenceId: id,
+                referenceName: (tournament?.name || 'Tournament') + ' Entry',
+                tournamentPlayerId: selectedPlayer.id,
+                clubId: tournament?.clubId
+            });
+            await completeTransaction(txId, 'manual_admin', paymentInfo.note || 'manual');
+            setShowPaymentModal(false);
+            setPaymentInfo({ amount: '50', note: '' });
+            setSelectedPlayer(null);
+            await loadData();
+        } catch (error) {
+            alert("Error recording payment");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleRevertPayment = async (player: TournamentPlayer) => {
+        if (!id || !window.confirm(`Revert payment for ${player.name}?`)) return;
+        try {
+            await revertLatestTransactionForUser(id, player.uid, player.id);
+            await loadData();
+        } catch (error) {
+            alert("Error reverting payment");
+        }
+    };
+
+    const handleToggleWildcard = async (player: TournamentPlayer) => {
+        if (!id) return;
+        try {
+            await updatePlayerInTournament(id, player.id, { isWildcard: !player.isWildcard });
+            await loadData();
+        } catch (error) {
+            alert("Error updating wildcard status");
+        }
+    };
+
+    const handleUpdateSeed = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !selectedPlayer || processing) return;
+        setProcessing(true);
+        try {
+            const seed = seedValue === '' ? null : parseInt(seedValue);
+            await updatePlayerSeed(id, selectedPlayer.id, seed);
+            setShowSeedModal(false);
+            setSeedValue('');
+            setSelectedPlayer(null);
+            await loadData();
+        } catch (error) {
+            alert("Error updating seed");
+        } finally {
+            setProcessing(false);
+        }
+    };
+    const handleAutoSeed = async () => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
+            await autoSeedPlayers(id, cat);
+            setShowRandomModal(false);
+            await loadData();
+        } catch (error) {
+            alert("Error auto-seeding players");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleGenerateRandom = async () => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            const count = parseInt(randomCount);
+            for (let i = 0; i < count; i++) {
+                const rnd = Math.floor(Math.random() * 10000);
+                const fakeName = `Test Player ${rnd}`;
+                const userRef = await addDoc(collection(db, 'users'), {
+                    displayName: fakeName,
+                    email: `test_${Date.now()}_${rnd}@test.com`,
+                    createdAt: Timestamp.now(),
+                    isManual: true,
+                    role: 'player'
+                });
+                await addPlayerToTournament(id, {
+                    name: fakeName,
+                    uid: userRef.id,
+                    isWildcard: false,
+                    isManual: true,
+                    category: randomCategory || undefined
+                });
+            }
+            setShowRandomModal(false);
+            await loadData();
+        } catch (error) {
+            alert("Error generating players");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleCleanup = async () => {
+        if (!id || !window.confirm("Delete ALL test players? This cannot be undone.")) return;
+        setProcessing(true);
+        try {
+            await deleteManualPlayers(id);
+            await loadData();
+        } catch (error) {
+            alert("Error during cleanup");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const filteredPlayers = players.filter(p =>
+        p.registrationStatus === 'approved' &&
+        (selectedCategory === 'all' || p.category === selectedCategory)
+    );
+
+    if (loading) return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-tennis-green"></div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-10 animate-fade-in relative">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate(`/admin/tournaments/${id}`)}
+                        className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-white transition-all"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div>
+                        <h1 className="text-white text-3xl font-black uppercase tracking-tight">{tournament?.name} - Players</h1>
+                        <p className="text-gray-500 font-bold uppercase text-xs tracking-widest mt-1">Manage Tournament Roster</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleCleanup}
+                        className="p-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl border border-red-500/10 transition-all"
+                        title="Delete All Test Data"
+                    >
+                        <Trash2 size={24} />
+                    </button>
+                    <button
+                        onClick={() => setShowRandomModal(true)}
+                        className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"
+                        title="Generate Test Players"
+                    >
+                        <Users size={24} />
+                    </button>
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-tennis-green/20 transition-all flex items-center gap-2"
+                    >
+                        <Plus size={20} />
+                        Add Player
+                    </button>
+                </div>
+            </div>
+
+            {/* Pending Requests Section */}
+            {pendingRegs.length > 0 && (
+                <div className="space-y-6">
+                    <h2 className="text-white text-xl font-bold uppercase tracking-tight flex items-center gap-3">
+                        <Users className="text-orange-500" />
+                        Pending Registrations ({pendingRegs.length})
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {pendingRegs.map(player => (
+                            <div key={player.id} className="glass border-orange-500/20 p-6 rounded-3xl space-y-4">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-white font-bold text-lg">{player.name}</h3>
+                                        <p className="text-gray-500 text-xs">{player.email}</p>
+                                        {player.category && (
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded mt-2 inline-block">
+                                                Category: {player.category}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <button
+                                        onClick={() => handleApprove(player)}
+                                        className="flex-1 bg-tennis-green text-tennis-dark py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest hover:scale-[1.02] transition-all"
+                                    >
+                                        Approve
+                                    </button>
+                                    <button
+                                        onClick={() => { setSelectedPlayer(player); setShowRejectModal(true); }}
+                                        className="flex-1 bg-red-500/10 text-red-500 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all"
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Approved Players Section */}
+            <div className="space-y-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <h2 className="text-white text-xl font-bold uppercase tracking-tight flex items-center gap-3">
+                        <CheckCircle2 className="text-tennis-green" />
+                        Approved Roster ({players.length})
+                    </h2>
+
+                    {tournament?.categories && tournament.categories.length > 0 && (
+                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1">
+                            <button
+                                onClick={() => setSelectedCategory('all')}
+                                className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === 'all' ? 'bg-white text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                            >
+                                All categories
+                            </button>
+                            {tournament.categories.map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === cat ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                    {filteredPlayers.length === 0 ? (
+                        <div className="glass p-20 rounded-[40px] border-dashed border-2 border-white/10 flex flex-col items-center justify-center text-center">
+                            <h3 className="text-white text-xl font-bold">No players found</h3>
+                            <p className="text-gray-500 mt-2">Try adjusting your filters or add players manually.</p>
+                        </div>
+                    ) : (
+                        filteredPlayers.map(player => (
+                            <div key={player.id} className="glass p-6 rounded-[32px] border-white/5 hover:border-white/10 transition-all flex flex-col md:flex-row items-center justify-between gap-6 group">
+                                <div className="flex items-center gap-6 w-full md:w-auto">
+                                    <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-white shrink-0 font-black text-2xl group-hover:bg-tennis-green group-hover:text-tennis-dark transition-all duration-500">
+                                        {player.name.charAt(0)}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-white font-bold text-lg">{player.name}</h3>
+                                            {player.isWildcard && (
+                                                <span className="bg-yellow-500/20 text-yellow-500 text-[8px] font-black px-2 py-0.5 rounded border border-yellow-500/20 flex items-center gap-1">
+                                                    <Crown size={10} />
+                                                    WC
+                                                </span>
+                                            )}
+                                            {player.isManual && (
+                                                <span className="text-gray-600 text-[8px] font-black uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">Test</span>
+                                            )}
+                                        </div>
+                                        <p className="text-gray-500 text-xs">{player.email || 'No email provided'}</p>
+                                        <div className="flex items-center gap-4 mt-2">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-tennis-green bg-tennis-green/5 px-2 py-0.5 rounded border border-tennis-green/10">
+                                                {player.category || 'No Category'}
+                                            </span>
+                                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${player.paymentStatus === 'paid' ? 'text-blue-400 bg-blue-500/5 border-blue-500/10' : 'text-gray-600 bg-white/5 border-white/5'}`}>
+                                                {player.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                                            </span>
+                                            {player.seed && (
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10">
+                                                    Seed #{player.seed}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                    <button
+                                        onClick={() => { setSelectedPlayer(player); setSeedValue(player.seed?.toString() || ''); setShowSeedModal(true); }}
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.seed ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-gray-700 hover:text-white'}`}
+                                        title="Assign Seed"
+                                    >
+                                        <ShieldAlert size={20} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleToggleWildcard(player)}
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.isWildcard ? 'bg-yellow-500/10 text-yellow-500' : 'bg-white/5 text-gray-700 hover:text-white'}`}
+                                        title="Toggle Wildcard"
+                                    >
+                                        <Crown size={20} />
+                                    </button>
+                                    {player.paymentStatus !== 'paid' ? (
+                                        <button
+                                            onClick={() => { setSelectedPlayer(player); setShowPaymentModal(true); }}
+                                            className="w-12 h-12 bg-white/5 hover:bg-tennis-green hover:text-tennis-dark rounded-2xl flex items-center justify-center text-gray-500 transition-all border border-white/5 hover:border-tennis-green"
+                                            title="Record Payment"
+                                        >
+                                            <DollarSign size={20} />
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleRevertPayment(player)}
+                                            className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center border border-blue-500/10 hover:bg-blue-500/20 transition-all"
+                                            title="Revert Payment"
+                                        >
+                                            <RefreshCw size={20} />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => handleRemovePlayer(player.id)}
+                                        className="w-12 h-12 bg-white/5 hover:bg-red-500/20 text-gray-700 hover:text-red-500 rounded-2xl flex items-center justify-center transition-all border border-white/5 hover:border-red-500/20"
+                                        title="Remove Player"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
+            {/* Modal: Add Player */}
+            {showAddModal && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowAddModal(false)}></div>
+                    <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-950 border-l border-white/10 z-50 p-12 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right">
+                        <div className="flex justify-between items-center mb-10">
+                            <div>
+                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">Add Player</h2>
+                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Manual Enrollment</p>
+                            </div>
+                            <button onClick={() => setShowAddModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAddPlayer} className="space-y-8">
+                            <div className="space-y-4">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Full Name</label>
+                                <input
+                                    required
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
+                                    value={newPlayer.name}
+                                    onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })}
+                                    placeholder="John Doe"
+                                />
+                            </div>
+                            <div className="space-y-4">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Email (Optional)</label>
+                                <input
+                                    type="email"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
+                                    value={newPlayer.email}
+                                    onChange={e => setNewPlayer({ ...newPlayer, email: e.target.value })}
+                                    placeholder="john@example.com"
+                                />
+                                <p className="text-[10px] text-gray-600 italic">If email matches an existing user, they will be linked.</p>
+                            </div>
+
+                            <div
+                                onClick={() => setNewPlayer({ ...newPlayer, isWildcard: !newPlayer.isWildcard })}
+                                className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${newPlayer.isWildcard ? 'bg-yellow-500/10 border-yellow-500/50' : 'bg-white/5 border-white/10 opacity-50'}`}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <Crown className={newPlayer.isWildcard ? 'text-yellow-500' : 'text-gray-500'} />
+                                    <div>
+                                        <p className={`font-bold text-sm uppercase tracking-tight ${newPlayer.isWildcard ? 'text-white' : 'text-gray-500'}`}>Wildcard Entry</p>
+                                        <p className="text-[10px] text-gray-600">Golden ticket registration</p>
+                                    </div>
+                                </div>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${newPlayer.isWildcard ? 'border-yellow-500 bg-yellow-500' : 'border-gray-800'}`}>
+                                    {newPlayer.isWildcard && <Check size={14} className="text-tennis-dark" />}
+                                </div>
+                            </div>
+
+                            <button
+                                disabled={processing}
+                                className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-10"
+                            >
+                                {processing ? <RefreshCw className="animate-spin" /> : <UserPlus size={24} />}
+                                Enroll Player
+                            </button>
+                        </form>
+                    </div>
+                </>
+            )}
+
+            {/* Modal: Record Payment */}
+            {showPaymentModal && selectedPlayer && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowPaymentModal(false)}></div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Entry Fee</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Record Manual Payment</p>
+                                </div>
+                                <button onClick={() => setShowPaymentModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="bg-white/5 rounded-3xl p-6 text-center">
+                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">Player</p>
+                                <p className="text-white text-2xl font-black">{selectedPlayer.name}</p>
+                            </div>
+
+                            <form onSubmit={handlePayment} className="space-y-6">
+                                <div className="space-y-4">
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Amount ($)</label>
+                                    <input
+                                        required
+                                        type="number"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-3xl text-center focus:outline-none focus:border-tennis-green/50"
+                                        value={paymentInfo.amount}
+                                        onChange={e => setPaymentInfo({ ...paymentInfo, amount: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-4">
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Internal Note</label>
+                                    <input
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
+                                        value={paymentInfo.note}
+                                        onChange={e => setPaymentInfo({ ...paymentInfo, note: e.target.value })}
+                                        placeholder="Cash, Zelle, Bank transfer..."
+                                    />
+                                </div>
+                                <button
+                                    disabled={processing}
+                                    className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                >
+                                    {processing ? <RefreshCw className="animate-spin" /> : <CheckCircle2 size={24} />}
+                                    Confirm Payment
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Modal: Reject Request */}
+            {showRejectModal && selectedPlayer && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowRejectModal(false)}></div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-red-500 text-3xl font-black uppercase tracking-tight">Reject</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Registration Denial</p>
+                                </div>
+                                <button onClick={() => setShowRejectModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <p className="text-gray-400">Denying registration for <span className="font-bold text-white">{selectedPlayer.name}</span>. Please provide a reason that will be sent to the player.</p>
+
+                            <div className="space-y-4">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Reason for Rejection</label>
+                                <textarea
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-red-500/50 min-h-[120px]"
+                                    value={rejectReason}
+                                    onChange={e => setRejectReason(e.target.value)}
+                                    placeholder="Inaccurate category, missing information, etc."
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleReject}
+                                disabled={processing || !rejectReason.trim()}
+                                className="w-full bg-red-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-red-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                            >
+                                {processing ? <RefreshCw className="animate-spin" /> : <X size={24} />}
+                                Confirm Rejection
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Modal: Random (Developer Tools) */}
+            {showRandomModal && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowRandomModal(false)}></div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Test Suite</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Generate Random Players</p>
+                                </div>
+                                <button onClick={() => setShowRandomModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div className="space-y-4">
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Number of Players</label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl text-center focus:outline-none focus:border-blue-500/50"
+                                        value={randomCount}
+                                        onChange={e => setRandomCount(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-4">
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">Assign to Category</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {CATEGORY_ORDER.map(cat => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => setRandomCategory(cat === randomCategory ? null : cat)}
+                                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${randomCategory === cat ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/20'}`}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleGenerateRandom}
+                                    disabled={processing}
+                                    className="w-full bg-blue-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                >
+                                    {processing ? <RefreshCw className="animate-spin" /> : <Users size={24} />}
+                                    Run Generator
+                                </button>
+
+                                <div className="pt-4 border-t border-white/5 space-y-4">
+                                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">Batch Operations</p>
+                                    <button
+                                        onClick={handleAutoSeed}
+                                        disabled={processing}
+                                        className="w-full bg-white/5 hover:bg-white/10 text-white py-4 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/5"
+                                    >
+                                        <ShieldAlert size={16} />
+                                        Auto-Seed by Club Points
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Modal: Seed Management */}
+            {showSeedModal && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowSeedModal(false)}></div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">Assign Seed</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{selectedPlayer?.name}</p>
+                                </div>
+                                <button onClick={() => setShowSeedModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleUpdateSeed} className="space-y-6">
+                                <div className="space-y-4">
+                                    <label className="text-gray-400 text-xs font-bold uppercase tracking-widest ml-1">Tournament Seed (Leave blank to remove)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-white text-3xl font-black text-center focus:outline-none focus:border-tennis-green/50 transition-all"
+                                        placeholder="e.g. 1"
+                                        value={seedValue}
+                                        onChange={e => setSeedValue(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={processing}
+                                    className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                >
+                                    {processing ? <RefreshCw className="animate-spin" /> : <Check size={24} />}
+                                    Save Seed Assignment
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+export default TournamentPlayersPage;
