@@ -1,17 +1,25 @@
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { LogIn } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
 const LoginPage = () => {
     const { t } = useLanguage();
+    const { user, role, isLoading } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!isLoading && user && role === 'admin') {
+            navigate('/admin');
+        }
+    }, [user, role, isLoading, navigate]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -29,6 +37,14 @@ const LoginPage = () => {
             setLoading(false);
         }
     };
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-tennis-dark flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-tennis-green"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-tennis-dark flex items-center justify-center p-4 relative overflow-hidden">

@@ -29,16 +29,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let unsubscribeUserDoc: (() => void) | null = null;
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-            setUser(currentUser);
-
             if (unsubscribeUserDoc) {
                 unsubscribeUserDoc();
                 unsubscribeUserDoc = null;
             }
 
             if (currentUser) {
-                const userRef = doc(db, 'users', currentUser.uid);
+                setIsLoading(true);
+                setUser(currentUser);
 
+                const userRef = doc(db, 'users', currentUser.uid);
                 unsubscribeUserDoc = onSnapshot(userRef, (snapshot) => {
                     if (snapshot.exists()) {
                         const data = snapshot.data();
@@ -54,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setIsLoading(false);
                 });
             } else {
+                setUser(null);
                 setRole(null);
                 setManagedClubId(null);
                 setIsLoading(false);
