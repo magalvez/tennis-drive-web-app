@@ -115,13 +115,27 @@ const DashboardPage = () => {
         }
     };
 
-    const getActivityIcon = (type: string) => {
+    const getActivityColor = (type: string) => {
         switch (type) {
-            case 'user_register': return <UserPlus size={16} className="text-blue-400" />;
-            case 'tournament_join': return <Ticket size={16} className="text-tennis-green" />;
-            case 'tournament_withdraw': return <LogOut size={16} className="text-red-500" />;
-            case 'transaction': return <DollarSign size={16} className="text-yellow-500" />;
-            default: return <Activity size={16} className="text-white" />;
+            case 'user_register': return 'blue';
+            case 'tournament_join': return 'tennis-green';
+            case 'tournament_withdraw': return 'red';
+            case 'transaction': return 'yellow';
+            case 'match_complete': return 'purple';
+            case 'tournament_create': return 'orange';
+            default: return 'gray';
+        }
+    };
+
+    const getActivityIcon = (type: string) => {
+        const size = 14;
+        switch (type) {
+            case 'user_register': return <UserPlus size={size} />;
+            case 'tournament_join': return <Ticket size={size} />;
+            case 'tournament_withdraw': return <LogOut size={size} />;
+            case 'transaction': return <DollarSign size={size} />;
+            case 'tournament_create': return <Trophy size={size} />;
+            default: return <Activity size={size} />;
         }
     };
 
@@ -218,26 +232,52 @@ const DashboardPage = () => {
                 {/* Recent Activity */}
                 <div className="space-y-6">
                     <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('dashboard.recentActivity')}</h2>
-                    <div className="glass rounded-[32px] border-white/5 overflow-hidden">
-                        <div className="p-2 space-y-1">
-                            {recentActivities.map((activity, i) => (
-                                <div key={i} className="flex items-start gap-4 p-4 rounded-2xl hover:bg-white/5 transition-all group">
-                                    <div className="mt-1 w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                        {getActivityIcon(activity.type)}
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-white text-sm font-bold leading-tight">{activity.title}</p>
-                                        <p className="text-gray-500 text-[10px] font-medium leading-relaxed">{activity.description}</p>
-                                        <div className="flex items-center gap-1.5 text-gray-700 text-[8px] font-black uppercase tracking-widest pt-1">
-                                            <Clock size={8} />
-                                            {activity.createdAt?.seconds
-                                                ? new Date(activity.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                : t('dashboard.justNow')
+                    <div className="glass rounded-[32px] border-white/5 p-8 h-fit min-h-[400px]">
+                        <div className="relative space-y-0">
+                            {/* Vertical Line */}
+                            <div className="absolute left-[15px] top-2 bottom-2 w-px bg-white/10" />
+
+                            {recentActivities.map((activity, i) => {
+                                const typeColor = getActivityColor(activity.type);
+                                return (
+                                    <div key={i} className="relative flex gap-6 pb-10 last:pb-0 group">
+                                        {/* Icon Container */}
+                                        <div className={`
+                                            relative z-10 w-8 h-8 rounded-xl shrink-0 flex items-center justify-center transition-all duration-300 group-hover:scale-110 shadow-2xl
+                                            ${typeColor === 'tennis-green' ? 'bg-tennis-green text-tennis-dark' :
+                                                typeColor === 'blue' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' :
+                                                    typeColor === 'red' ? 'bg-red-500/20 text-red-500 border border-red-500/20' :
+                                                        typeColor === 'yellow' ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/20' :
+                                                            typeColor === 'purple' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' :
+                                                                typeColor === 'orange' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/20' :
+                                                                    'bg-white/10 text-white'
                                             }
+                                        `}>
+                                            {getActivityIcon(activity.type)}
+                                        </div>
+
+                                        <div className="space-y-1 pt-0.5">
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                                                <h4 className="text-white text-sm font-bold group-hover:text-tennis-green transition-colors leading-tight">
+                                                    {activity.title}
+                                                </h4>
+                                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/5">
+                                                    <Clock size={8} className="text-gray-600" />
+                                                    <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest leading-none">
+                                                        {activity.createdAt?.seconds
+                                                            ? new Date(activity.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                            : t('dashboard.justNow')
+                                                        }
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <p className="text-gray-500 text-[11px] font-medium leading-relaxed max-w-xs">
+                                                {activity.description}
+                                            </p>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
