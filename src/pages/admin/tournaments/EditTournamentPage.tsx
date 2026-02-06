@@ -8,12 +8,13 @@ import {
     Trash2,
     Trophy,
     RefreshCw,
-    X
+    X,
+    AlertTriangle
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLanguage } from '../../../context/LanguageContext';
-import { CATEGORY_ORDER, getTournamentById, updateTournament } from '../../../services/tournamentService';
+import { CATEGORY_ORDER, getTournamentById, updateTournament, deleteTournament } from '../../../services/tournamentService';
 import { uploadImage } from '../../../services/imageService';
 import type { TournamentCategory, TournamentData } from '../../../services/types';
 
@@ -33,6 +34,8 @@ const EditTournamentPage = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [formData, setFormData] = useState<Partial<TournamentData>>({
         courtType: 'hard',
         categories: []
@@ -82,6 +85,21 @@ const EditTournamentPage = () => {
                 setImagePreview(reader.result as string);
             };
             reader.readAsDataURL(file);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!id) return;
+        setDeleting(true);
+        try {
+            await deleteTournament(id);
+            navigate('/admin/tournaments');
+        } catch (error) {
+            console.error('Error deleting tournament', error);
+            alert(t('admin.tournaments.deleteError'));
+        } finally {
+            setDeleting(false);
+            setShowDeleteModal(false);
         }
     };
 
@@ -319,20 +337,56 @@ const EditTournamentPage = () => {
                         {saving ? <RefreshCw className="animate-spin" /> : <Save size={24} />}
                         {t('admin.tournaments.edit.save')}
                     </button>
-                    {/* Placeholder for Delete */}
+                    {/* Delete Button */}
                     <button
                         type="button"
                         className="px-8 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-3xl border border-red-500/10 transition-all flex items-center justify-center"
-                        onClick={() => alert("Deletion is a restricted operation. Please contact system owner.")}
+                        onClick={() => setShowDeleteModal(true)}
                     >
                         <Trash2 size={24} />
                     </button>
                 </div>
             </form>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
+                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl transform scale-100 transition-all">
+                        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto text-red-500 mb-2">
+                            <AlertTriangle size={32} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <h3 className="text-white text-2xl font-bold">{t('admin.tournaments.delete')}</h3>
+                            <p className="text-gray-400 leading-relaxed">
+                                {t('admin.tournaments.deleteConfirm')}
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            <button
+                                onClick={() => setShowDeleteModal(false)}
+                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                disabled={deleting}
+                                className="py-4 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                {deleting ? (
+                                    <RefreshCw size={20} className="animate-spin" />
+                                ) : (
+                                    t('admin.tournaments.delete')
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
-
-
 
 export default EditTournamentPage;

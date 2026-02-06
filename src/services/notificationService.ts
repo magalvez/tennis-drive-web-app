@@ -94,10 +94,7 @@ export const getUserNotifications = async (uid: string, limitCount = 20) => {
     }
 };
 
-export const notifyPlayerApproved = async (uid: string, tournamentName: string, category: string) => {
-    const title = "Registration Approved! 🎾";
-    const body = `You have been approved for ${tournamentName} in the ${category} category. Get ready!`;
-
+export const notifyPlayerApproved = async (uid: string, title: string, body: string) => {
     // In-app notification
     await addNotification(uid, title, body, 'tournament');
 
@@ -108,10 +105,7 @@ export const notifyPlayerApproved = async (uid: string, tournamentName: string, 
     }
 };
 
-export const notifyPlayerRejected = async (uid: string, tournamentName: string, reason: string) => {
-    const title = "Update on your registration";
-    const body = `Your registration for ${tournamentName} was not approved. Reason: ${reason}`;
-
+export const notifyPlayerRejected = async (uid: string, title: string, body: string) => {
     // In-app notification
     await addNotification(uid, title, body, 'tournament');
 

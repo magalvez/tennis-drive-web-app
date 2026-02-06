@@ -13,7 +13,9 @@ import {
     Trash2,
     Trophy,
     Users,
-    X
+    X,
+    AlertTriangle,
+    RefreshCw
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -37,6 +39,8 @@ const TournamentDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [matchCount, setMatchCount] = useState(0);
     const [updating, setUpdating] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     // Modals
     const [showCommModal, setShowCommModal] = useState(false);
@@ -50,6 +54,17 @@ const TournamentDetailPage = () => {
         loss: 10,
         withdraw: 5
     });
+
+    const [infoModal, setInfoModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        type: 'error' | 'success';
+    }>({ open: false, title: '', message: '', type: 'error' });
+
+    const showInfo = (title: string, message: string, type: 'error' | 'success' = 'error') => {
+        setInfoModal({ open: true, title, message, type });
+    };
 
     useEffect(() => {
         if (id) fetchTournament();
@@ -71,19 +86,26 @@ const TournamentDetailPage = () => {
             }
         } catch (error) {
             console.error(error);
-            alert(t('admin.tournaments.fetchError'));
+            showInfo(t('common.error'), t('admin.tournaments.fetchError'));
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDelete = async () => {
-        if (!id || !window.confirm(t('admin.tournaments.deleteConfirm'))) return;
+    const handleDeleteClick = () => {
+        setShowDeleteModal(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!id) return;
+        setDeleting(true);
         try {
             await deleteTournament(id);
             navigate('/admin/tournaments');
         } catch (error) {
-            alert(t('common.error'));
+            showInfo(t('common.error'), t('common.error'));
+            setDeleting(false);
+            setShowDeleteModal(false);
         }
     };
 
@@ -94,7 +116,7 @@ const TournamentDetailPage = () => {
             await updateTournament(id, { status: newStatus });
             setTournament({ ...tournament, status: newStatus });
         } catch (error) {
-            alert(t('common.error'));
+            showInfo(t('common.error'), t('common.error'));
         } finally {
             setUpdating(false);
         }
@@ -106,12 +128,12 @@ const TournamentDetailPage = () => {
         try {
             const playerUids = players.map(p => p.uid);
             const count = await sendTournamentAnnouncement(id, playerUids, commTitle, commBody);
-            alert(`Sent to ${count} players with active push tokens!`);
+            showInfo(t('common.success'), `Sent to ${count} players with active push tokens!`, 'success');
             setShowCommModal(false);
             setCommTitle('');
             setCommBody('');
         } catch (error) {
-            alert("Failed to send notifications");
+            showInfo(t('common.error'), "Failed to send notifications");
         } finally {
             setSending(false);
         }
@@ -124,9 +146,9 @@ const TournamentDetailPage = () => {
             await updateTournament(id, { scoringConfig: localScoring });
             setTournament({ ...tournament, scoringConfig: localScoring });
             setShowScoringModal(false);
-            alert("Scoring configuration updated!");
+            showInfo(t('common.success'), "Scoring configuration updated!", 'success');
         } catch (error) {
-            alert(t('common.error'));
+            showInfo(t('common.error'), t('common.error'));
         } finally {
             setUpdating(false);
         }
@@ -179,7 +201,7 @@ const TournamentDetailPage = () => {
                         <Edit size={20} />
                     </button>
                     <button
-                        onClick={handleDelete}
+                        onClick={handleDeleteClick}
                         className="p-3 bg-red-500/10 hover:bg-red-500/20 rounded-xl text-red-500 transition-all"
                     >
                         <Trash2 size={20} />
@@ -407,6 +429,62 @@ const TournamentDetailPage = () => {
                         </div>
                     </div>
                 </>
+            )}
+            {/* Delete Confirmation Modal */}
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
+                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl transform scale-100 transition-all">
+                        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto text-red-500 mb-2">
+                            <AlertTriangle size={32} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <h3 className="text-white text-2xl font-bold">{t('admin.tournaments.delete')}</h3>
+                            <p className="text-gray-400 leading-relaxed">
+                                {t('admin.tournaments.deleteConfirm')}
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            <button
+                                onClick={() => setShowDeleteModal(false)}
+                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                disabled={deleting}
+                                className="py-4 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                {deleting ? (
+                                    <RefreshCw size={20} className="animate-spin" />
+                                ) : (
+                                    t('admin.tournaments.delete')
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Generic Info/Error Modal */}
+            {infoModal.open && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${infoModal.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-tennis-green/10 text-tennis-green'}`}>
+                            {infoModal.type === 'error' ? <AlertTriangle size={32} /> : <CheckCircle size={32} />}
+                        </div>
+                        <h3 className="text-white text-xl font-bold">{infoModal.title}</h3>
+                        <p className="text-gray-400">{infoModal.message}</p>
+                        <button
+                            onClick={() => setInfoModal(prev => ({ ...prev, open: false }))}
+                            className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                        >
+                            {t('common.close')}
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

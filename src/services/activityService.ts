@@ -1,4 +1,4 @@
-import { addDoc, collection, limit as firestoreLimit, getDocs, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import { addDoc, collection, limit as firestoreLimit, getDocs, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export type ActivityType = 'transaction' | 'tournament_create' | 'tournament_join' | 'tournament_withdraw' | 'user_register' | 'match_complete';
@@ -64,4 +64,31 @@ export const getRecentActivities = async (limitCount: number = 20, clubId?: stri
         console.error('Error fetching activities:', error);
         return [];
     }
+};
+
+export const subscribeToRecentActivities = (
+    limitCount: number = 20,
+    clubId: string | undefined,
+    callback: (activities: Activity[]) => void
+) => {
+    const activitiesRef = collection(db, 'activities');
+    let q;
+    if (clubId) {
+        q = query(
+            activitiesRef,
+            where('clubId', '==', clubId),
+            orderBy('createdAt', 'desc'),
+            firestoreLimit(limitCount)
+        );
+    } else {
+        q = query(activitiesRef, orderBy('createdAt', 'desc'), firestoreLimit(limitCount));
+    }
+
+    return onSnapshot(q, (snapshot) => {
+        const activities = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Activity));
+        callback(activities);
+    });
 };

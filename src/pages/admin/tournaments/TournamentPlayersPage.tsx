@@ -11,7 +11,8 @@ import {
     Trash2,
     UserPlus,
     Users,
-    X
+    X,
+    AlertTriangle
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -62,6 +63,34 @@ const TournamentPlayersPage = () => {
     const [randomCategory, setRandomCategory] = useState<TournamentCategory | null>(null);
     const [showSeedModal, setShowSeedModal] = useState(false);
     const [seedValue, setSeedValue] = useState('');
+
+    // Generic Modal States
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => Promise<void>;
+        type: 'danger' | 'warning' | 'info';
+    }>({ open: false, title: '', message: '', onConfirm: async () => { }, type: 'danger' });
+
+    const [errorModal, setErrorModal] = useState<{
+        open: boolean;
+        message: string;
+    }>({ open: false, message: '' });
+
+    const showError = (msg: string) => {
+        setErrorModal({ open: true, message: msg });
+    };
+
+    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' = 'danger') => {
+        setConfirmModal({
+            open: true,
+            title,
+            message,
+            onConfirm,
+            type
+        });
+    };
 
     const loadData = useCallback(async () => {
         if (!id) return;
@@ -123,30 +152,45 @@ const TournamentPlayersPage = () => {
             setNewPlayer({ name: '', email: '', isWildcard: false });
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorAddingPlayer'));
+            showError(t('admin.tournaments.errorAddingPlayer'));
         } finally {
             setProcessing(false);
         }
     };
 
-    const handleRemovePlayer = async (playerId: string) => {
-        if (!id || !window.confirm(t('admin.tournaments.confirmRemovePlayer'))) return;
-        try {
-            await removePlayerFromTournament(id, playerId);
-            await loadData();
-        } catch (error) {
-            alert(t('admin.tournaments.errorRemovingPlayer'));
-        }
+    const handleRemovePlayer = (playerId: string) => {
+        showConfirmation(
+            t('admin.tournaments.removePlayer'),
+            t('admin.tournaments.confirmRemovePlayer'),
+            async () => {
+                try {
+                    setProcessing(true);
+                    await removePlayerFromTournament(id!, playerId);
+                    await loadData();
+                } catch (error) {
+                    showError(t('admin.tournaments.errorRemovingPlayer'));
+                } finally {
+                    setProcessing(false);
+                    setConfirmModal(prev => ({ ...prev, open: false }));
+                }
+            },
+            'danger'
+        );
     };
 
     const handleApprove = async (player: TournamentPlayer) => {
         if (!id || !user?.uid) return;
         try {
             await approveRegistration(id, player.id, user.uid);
-            await notifyPlayerApproved(player.uid, tournament?.name || '', player.category || 'unknown');
+            const title = t('admin.notifications.automated.approved.title');
+            const body = t('admin.notifications.automated.approved.body', {
+                tournament: tournament?.name || '',
+                category: player.category ? t(`admin.tournaments.categories.${player.category}`) : t('common.none')
+            });
+            await notifyPlayerApproved(player.uid, title, body);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorApprovingRegistration'));
+            showError(t('admin.tournaments.errorApprovingRegistration'));
         }
     };
 
@@ -155,13 +199,18 @@ const TournamentPlayersPage = () => {
         setProcessing(true);
         try {
             await rejectRegistration(id, selectedPlayer.id, user.uid, rejectReason);
-            await notifyPlayerRejected(selectedPlayer.uid, tournament?.name || '', rejectReason);
+            const title = t('admin.notifications.automated.rejected.title');
+            const body = t('admin.notifications.automated.rejected.body', {
+                tournament: tournament?.name || '',
+                reason: rejectReason
+            });
+            await notifyPlayerRejected(selectedPlayer.uid, title, body);
             setShowRejectModal(false);
             setRejectReason('');
             setSelectedPlayer(null);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorRejectingRegistration'));
+            showError(t('admin.tournaments.errorRejectingRegistration'));
         } finally {
             setProcessing(false);
         }
@@ -189,20 +238,31 @@ const TournamentPlayersPage = () => {
             setSelectedPlayer(null);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorRecordingPayment'));
+            showError(t('admin.tournaments.errorRecordingPayment'));
         } finally {
             setProcessing(false);
         }
     };
 
-    const handleRevertPayment = async (player: TournamentPlayer) => {
-        if (!id || !window.confirm(t('admin.tournaments.confirmRevertPayment', { name: player.name }))) return;
-        try {
-            await revertLatestTransactionForUser(id, player.uid, player.id);
-            await loadData();
-        } catch (error) {
-            alert(t('admin.tournaments.errorRevertingPayment'));
-        }
+    const handleRevertPayment = (player: TournamentPlayer) => {
+        showConfirmation(
+            t('admin.tournaments.revertPayment'),
+            t('admin.tournaments.confirmRevertPayment', { name: player.name }),
+            async () => {
+                if (!id) return;
+                try {
+                    setProcessing(true);
+                    await revertLatestTransactionForUser(id, player.uid, player.id);
+                    await loadData();
+                } catch (error) {
+                    showError(t('admin.tournaments.errorRevertingPayment'));
+                } finally {
+                    setProcessing(false);
+                    setConfirmModal(prev => ({ ...prev, open: false }));
+                }
+            },
+            'warning'
+        );
     };
 
     const handleToggleWildcard = async (player: TournamentPlayer) => {
@@ -211,7 +271,7 @@ const TournamentPlayersPage = () => {
             await updatePlayerInTournament(id, player.id, { isWildcard: !player.isWildcard });
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorUpdatingWildcard'));
+            showError(t('admin.tournaments.errorUpdatingWildcard'));
         }
     };
 
@@ -227,7 +287,7 @@ const TournamentPlayersPage = () => {
             setSelectedPlayer(null);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorUpdatingSeed'));
+            showError(t('admin.tournaments.errorUpdatingSeed'));
         } finally {
             setProcessing(false);
         }
@@ -241,7 +301,7 @@ const TournamentPlayersPage = () => {
             setShowRandomModal(false);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorAutoSeeding'));
+            showError(t('admin.tournaments.errorAutoSeeding'));
         } finally {
             setProcessing(false);
         }
@@ -273,23 +333,31 @@ const TournamentPlayersPage = () => {
             setShowRandomModal(false);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.errorGeneratingPlayers'));
+            showError(t('admin.tournaments.errorGeneratingPlayers'));
         } finally {
             setProcessing(false);
         }
     };
 
-    const handleCleanup = async () => {
-        if (!id || !window.confirm(t('admin.tournaments.confirmDeleteAllTestData'))) return;
-        setProcessing(true);
-        try {
-            await deleteManualPlayers(id);
-            await loadData();
-        } catch (error) {
-            alert(t('admin.tournaments.errorCleanup'));
-        } finally {
-            setProcessing(false);
-        }
+    const handleCleanup = () => {
+        showConfirmation(
+            t('admin.tournaments.deleteAllPlayers'),
+            t('admin.tournaments.confirmDeleteAllTestData'),
+            async () => {
+                if (!id) return;
+                setProcessing(true);
+                try {
+                    await deleteManualPlayers(id);
+                    await loadData();
+                } catch (error) {
+                    showError(t('admin.tournaments.errorCleanup'));
+                } finally {
+                    setProcessing(false);
+                    setConfirmModal(prev => ({ ...prev, open: false }));
+                }
+            },
+            'danger'
+        );
     };
 
     const filteredPlayers = players.filter(p =>
@@ -774,6 +842,55 @@ const TournamentPlayersPage = () => {
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* Generic Confirmation Modal */}
+            {confirmModal.open && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                            <AlertTriangle size={32} />
+                        </div>
+                        <div className="space-y-2">
+                            <h3 className="text-white text-2xl font-bold">{confirmModal.title}</h3>
+                            <p className="text-gray-400 leading-relaxed">{confirmModal.message}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            <button
+                                onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={confirmModal.onConfirm}
+                                disabled={processing}
+                                className={`py-4 rounded-2xl font-bold transition-colors flex items-center justify-center gap-2 ${confirmModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark'}`}
+                            >
+                                {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Modal */}
+            {errorModal.open && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                        <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
+                            <AlertTriangle size={32} />
+                        </div>
+                        <h3 className="text-white text-xl font-bold">{t('common.error')}</h3>
+                        <p className="text-gray-400">{errorModal.message}</p>
+                        <button
+                            onClick={() => setErrorModal(prev => ({ ...prev, open: false }))}
+                            className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                        >
+                            {t('common.close')}
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

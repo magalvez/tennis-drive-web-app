@@ -26,7 +26,8 @@
         "finalized": "Finalizado",
         "inProgress": "En Curso",
         "admin": "Administrador",
-        "confirmResult": "Confirmar Resultado"
+        "confirmResult": "Confirmar Resultado",
+        "none": "Ninguna"
     },
     "adminTabs": {
         "dashboard": "Dashboard",
@@ -49,7 +50,8 @@
         "attentionNeeded": "Atención Requerida",
         "inboxZero": "No hay registros pendientes",
         "recentActivity": "Actividad Reciente",
-        "justNow": "Recién"
+        "justNow": "Recién",
+        "yourCategory": "Tu Categoría"
     },
     "nav": {
         "home": "Inicio",
@@ -238,7 +240,7 @@
         "global": {
             "title": "Gestión Global",
             "recalculateRanking": "Recalcular Rankings",
-            "recalculateRankingDesc": "Actualizar XP desde historial",
+            "recalculateRankingDesc": "Actualizar XP de los jugadores (+50/-15)",
             "recalculationSuccess": "¡Rankings actualizados!",
             "recalculationError": "Error al recalcular."
         },
@@ -334,6 +336,16 @@
                 "required": "Título y mensaje obligatorios.",
                 "noAudience": "Nadie tiene notificaciones activas.",
                 "failed": "Error al enviar."
+            },
+            "automated": {
+                "approved": {
+                    "title": "¡Inscripción Aprobada! 🎾",
+                    "body": "Has sido aprobado para %{tournament} en la categoría %{category}. ¡Prepárate!"
+                },
+                "rejected": {
+                    "title": "Actualización de tu inscripción",
+                    "body": "Tu inscripción para %{tournament} no fue aprobada. Motivo: %{reason}"
+                }
             }
         },
         "tournaments": {

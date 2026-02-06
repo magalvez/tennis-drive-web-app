@@ -8,15 +8,14 @@ import {
     Ticket,
     Trophy,
     UserPlus,
-    Users,
-    X
+    Users
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { getRecentActivities } from '../../services/activityService';
+import { subscribeToRecentActivities } from '../../services/activityService';
 import { notifyPlayerApproved, notifyPlayerRejected } from '../../services/notificationService';
-import { approveRegistration, getClubPendingRegistrations, rejectRegistration } from '../../services/registrationService';
+import { approveRegistration, rejectRegistration, subscribeToClubPendingRegistrations } from '../../services/registrationService';
 import { getTournamentMatches, getTournamentsByClub } from '../../services/tournamentService';
 import type { TournamentData, TournamentPlayer } from '../../services/types';
 import { getClubPlayers } from '../../services/userService';
@@ -49,39 +48,53 @@ const DashboardPage = () => {
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [rejectModal, setRejectModal] = useState<{ show: boolean, reg: PendingRegistration | null }>({ show: false, reg: null });
+    const [rejectReason, setRejectReason] = useState('');
 
-    const loadData = async () => {
-        if (!managedClubId) return;
-        try {
-            const [tData, pData, rData, activity] = await Promise.all([
-                getTournamentsByClub(managedClubId),
-                getClubPlayers(managedClubId),
-                getClubPendingRegistrations(managedClubId),
-                getRecentActivities(10, managedClubId)
-            ]);
 
-            setTournaments(tData);
-            setPlayersCount(pData.length);
-            setPendingRegs(rData);
-            setRecentActivities(activity);
-
-            let mCount = 0;
-            for (const tournament of tData) {
-                if (tournament.id) {
-                    const mData = await getTournamentMatches(tournament.id);
-                    mCount += mData.length;
-                }
-            }
-            setMatchesCount(mCount);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     useEffect(() => {
-        loadData();
+        if (!managedClubId) return;
+
+        // One-time load for stats and tournaments list
+        const loadInitial = async () => {
+            try {
+                const [tData, pData] = await Promise.all([
+                    getTournamentsByClub(managedClubId),
+                    getClubPlayers(managedClubId)
+                ]);
+                setTournaments(tData);
+                setPlayersCount(pData.length);
+
+                let mCount = 0;
+                for (const t of tData) {
+                    if (t.id) {
+                        const mData = await getTournamentMatches(t.id);
+                        mCount += mData.length;
+                    }
+                }
+                setMatchesCount(mCount);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadInitial();
+
+        // Subscriptions for real-time parts
+        const unsubRegs = subscribeToClubPendingRegistrations(managedClubId, (regs) => {
+            setPendingRegs(regs);
+        });
+
+        const unsubActivity = subscribeToRecentActivities(10, managedClubId, (activities) => {
+            setRecentActivities(activities);
+        });
+
+        return () => {
+            unsubRegs();
+            unsubActivity();
+        };
     }, [managedClubId]);
 
     const handleApprove = async (reg: PendingRegistration) => {
@@ -89,8 +102,12 @@ const DashboardPage = () => {
         setProcessing(true);
         try {
             await approveRegistration(reg.tournamentId, reg.player.id, user.uid);
-            await notifyPlayerApproved(reg.player.uid, reg.tournamentName, reg.player.category || 'unknown');
-            await loadData();
+            const title = t('admin.notifications.automated.approved.title');
+            const body = t('admin.notifications.automated.approved.body', {
+                tournament: reg.tournamentName,
+                category: reg.player.category ? t(`admin.tournaments.categories.${reg.player.category}`) : t('common.none')
+            });
+            await notifyPlayerApproved(reg.player.uid, title, body);
         } catch (error) {
             alert("Error approving registration");
         } finally {
@@ -98,17 +115,22 @@ const DashboardPage = () => {
         }
     };
 
-    const handleReject = async (reg: PendingRegistration) => {
-        if (!user?.uid) return;
-        const reason = window.prompt("Reason for rejection?");
-        if (!reason) return;
+    const handleReject = async () => {
+        if (!user?.uid || !rejectModal.reg || !rejectReason) return;
 
         setProcessing(true);
         try {
-            await rejectRegistration(reg.tournamentId, reg.player.id, user.uid, reason);
-            await notifyPlayerRejected(reg.player.uid, reg.tournamentName, reason);
-            await loadData();
+            await rejectRegistration(rejectModal.reg.tournamentId, rejectModal.reg.player.id, user.uid, rejectReason);
+            const title = t('admin.notifications.automated.rejected.title');
+            const body = t('admin.notifications.automated.rejected.body', {
+                tournament: rejectModal.reg.tournamentName,
+                reason: rejectReason
+            });
+            await notifyPlayerRejected(rejectModal.reg.player.uid, title, body);
+            setRejectModal({ show: false, reg: null });
+            setRejectReason('');
         } catch (error) {
+            console.error(error);
             alert("Error rejecting registration");
         } finally {
             setProcessing(false);
@@ -183,7 +205,9 @@ const DashboardPage = () => {
                 {/* Pending registrations */}
                 <div className="xl:col-span-2 space-y-6">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('dashboard.pendingRegistrations')}</h2>
+                        <h2 className="text-white text-xl font-bold uppercase tracking-tight">
+                            {t('dashboard.pendingRegistrations')} ({pendingRegs.length})
+                        </h2>
                         <span className="bg-orange-500/10 text-orange-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-orange-500/10">
                             {pendingRegs.length} {t('dashboard.attentionNeeded')}
                         </span>
@@ -195,32 +219,47 @@ const DashboardPage = () => {
                             <p className="text-gray-500 font-bold uppercase text-xs tracking-widest">{t('dashboard.inboxZero')}</p>
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {pendingRegs.map(reg => (
-                                <div key={reg.player.id} className="glass p-6 rounded-[24px] border-orange-500/10 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:border-orange-500/30">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-white font-black">
-                                            {reg.player.name.charAt(0)}
-                                        </div>
+                                <div key={reg.player.id} className="bg-orange-500/[0.03] p-8 rounded-[32px] border border-orange-500/10 space-y-8 flex flex-col justify-between transition-all hover:bg-orange-500/[0.05]">
+                                    <div className="space-y-4">
                                         <div>
-                                            <h3 className="text-white font-bold">{reg.player.name}</h3>
-                                            <p className="text-orange-400 text-[10px] font-black uppercase tracking-widest">{reg.tournamentName}</p>
+                                            <h3 className="text-white text-2xl font-black tracking-tight leading-tight">{reg.player.name}</h3>
+                                            <p className="text-orange-400 font-bold uppercase text-xs tracking-widest mt-1.5">{reg.tournamentName}</p>
                                         </div>
+
+                                        {(reg.player.category || reg.player.playerProfileCategory) && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">
+                                                    {t('dashboard.yourCategory')}:
+                                                </span>
+                                                <div className="flex items-center gap-2 text-gray-300 text-xs font-bold">
+                                                    {reg.player.playerProfileCategory ? t(`admin.tournaments.categories.${reg.player.playerProfileCategory}`) : '-'}
+                                                    {reg.player.category && reg.player.category !== reg.player.playerProfileCategory && (
+                                                        <>
+                                                            <span className="text-orange-400">→</span>
+                                                            <span className="text-tennis-green">{t(`admin.tournaments.categories.${reg.player.category}`)}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="flex gap-2">
+
+                                    <div className="grid grid-cols-2 gap-4">
                                         <button
                                             onClick={() => handleApprove(reg)}
                                             disabled={processing}
-                                            className="px-6 py-2.5 bg-tennis-green text-tennis-dark rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:scale-105"
+                                            className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
                                         >
-                                            {t('admin.tournaments.approveRegistration')}
+                                            {t('common.approve')}
                                         </button>
                                         <button
-                                            onClick={() => handleReject(reg)}
+                                            onClick={() => setRejectModal({ show: true, reg })}
                                             disabled={processing}
-                                            className="p-2.5 bg-white/5 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
                                         >
-                                            <X size={18} />
+                                            {t('common.reject')}
                                         </button>
                                     </div>
                                 </div>
@@ -282,6 +321,49 @@ const DashboardPage = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Rejection Modal */}
+            {rejectModal.show && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="glass w-full max-w-lg rounded-[40px] p-10 border-white/10 space-y-8 animate-scale-in">
+                        <div className="space-y-2">
+                            <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('common.reject')}</h2>
+                            <p className="text-gray-400 font-medium">
+                                {rejectModal.reg?.player.name} — <span className="text-orange-400">{rejectModal.reg?.tournamentName}</span>
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <textarea
+                                className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 text-white placeholder:text-gray-600 focus:outline-none focus:border-red-500/30 transition-all min-h-[120px] resize-none"
+                                placeholder={t('admin.tournaments.rejectReasonPh')}
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={() => {
+                                    setRejectModal({ show: false, reg: null });
+                                    setRejectReason('');
+                                }}
+                                className="bg-white/5 hover:bg-white/10 text-gray-400 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={handleReject}
+                                disabled={processing || !rejectReason.trim()}
+                                className="bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
+                            >
+                                {t('common.reject')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -48,7 +48,10 @@ export interface TournamentPlayer {
     seed?: number;
     isManual?: boolean;
     category?: TournamentCategory;
+    playerProfileCategory?: TournamentCategory;
     registrationStatus?: 'approved' | 'pending' | 'rejected';
+    clubId?: string;
+    tournamentName?: string;
 }
 
 export interface Match {

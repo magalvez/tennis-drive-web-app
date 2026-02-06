@@ -26,7 +26,8 @@
         "finalized": "Finalized",
         "inProgress": "In Progress",
         "admin": "Administrator",
-        "confirmResult": "Confirm Result"
+        "confirmResult": "Confirm Result",
+        "none": "None"
     },
     "adminTabs": {
         "dashboard": "Dashboard",
@@ -49,7 +50,8 @@
         "attentionNeeded": "Attention Needed",
         "inboxZero": "No pending registrations",
         "recentActivity": "Recent Activity",
-        "justNow": "Just Now"
+        "justNow": "Just Now",
+        "yourCategory": "Your Category"
     },
     "nav": {
         "home": "Home",
@@ -334,6 +336,16 @@
                 "required": "Please enter a title and message.",
                 "noAudience": "No registered users have push notifications enabled yet.",
                 "failed": "Failed to send message."
+            },
+            "automated": {
+                "approved": {
+                    "title": "Registration Approved! 🎾",
+                    "body": "You have been approved for %{tournament} in the %{category} category. Get ready!"
+                },
+                "rejected": {
+                    "title": "Registration Update",
+                    "body": "Your registration for %{tournament} was not approved. Reason: %{reason}"
+                }
             }
         },
         "tournaments": {

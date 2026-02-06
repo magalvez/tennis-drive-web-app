@@ -10,7 +10,8 @@ import {
     Table,
     Trophy,
     Users,
-    X
+    X,
+    AlertTriangle
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -55,6 +56,54 @@ const TournamentMatchesPage = () => {
     const [winnerId, setWinnerId] = useState<string | null>(null);
     const [isWithdrawal, setIsWithdrawal] = useState(false);
 
+    // Generic Modal States
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => Promise<void>;
+        type: 'danger' | 'warning' | 'info';
+    }>({ open: false, title: '', message: '', onConfirm: async () => { }, type: 'danger' });
+
+    const [errorModal, setErrorModal] = useState<{
+        open: boolean;
+        message: string;
+    }>({ open: false, message: '' });
+
+    const [inputModal, setInputModal] = useState<{
+        open: boolean;
+        title: string;
+        description: string;
+        defaultValue: string;
+        onConfirm: (value: string) => Promise<void>;
+    }>({ open: false, title: '', description: '', defaultValue: '', onConfirm: async () => { } });
+    const [inputValue, setInputValue] = useState('');
+
+    const showError = (msg: string) => {
+        setErrorModal({ open: true, message: msg });
+    };
+
+    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' = 'danger') => {
+        setConfirmModal({
+            open: true,
+            title,
+            message,
+            onConfirm,
+            type
+        });
+    };
+
+    const showInput = (title: string, description: string, defaultValue: string, onConfirm: (value: string) => Promise<void>) => {
+        setInputValue(defaultValue);
+        setInputModal({
+            open: true,
+            title,
+            description,
+            defaultValue,
+            onConfirm
+        });
+    };
+
     const loadData = useCallback(async () => {
         if (!id) return;
         setLoading(true);
@@ -85,22 +134,29 @@ const TournamentMatchesPage = () => {
         loadData();
     }, [loadData]);
 
-    const handleGenerateGroups = async () => {
+    const handleGenerateGroups = () => {
         if (!id || processing) return;
-        const count = window.prompt(t('admin.tournaments.matches.enterGroups'), "4");
-        if (!count) return;
 
-        setProcessing(true);
-        try {
-            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
-            await assignGroupsToPlayers(id, parseInt(count), cat);
-            await generateGroupStageMatches(id, cat);
-            await loadData();
-        } catch (error) {
-            alert(t('admin.tournaments.matches.errorGroups'));
-        } finally {
-            setProcessing(false);
-        }
+        showInput(
+            t('admin.tournaments.generateGroups'),
+            t('admin.tournaments.matches.enterGroups'),
+            "4",
+            async (val) => {
+                if (!val) return;
+                setProcessing(true);
+                try {
+                    const cat = selectedCategory === 'all' ? undefined : selectedCategory;
+                    await assignGroupsToPlayers(id, parseInt(val), cat);
+                    await generateGroupStageMatches(id, cat);
+                    await loadData();
+                    setInputModal(prev => ({ ...prev, open: false }));
+                } catch (error) {
+                    showError(t('admin.tournaments.matches.errorGroups'));
+                } finally {
+                    setProcessing(false);
+                }
+            }
+        );
     };
 
     const handleGenerateKnockout = async () => {
@@ -110,7 +166,7 @@ const TournamentMatchesPage = () => {
             const cat = selectedCategory === 'all' ? undefined : selectedCategory;
             const qualifiers = await getQualifiedPlayers(id, cat);
             if (qualifiers.length < 2) {
-                alert(t('bracket.groupsNotFinalized'));
+                showError(t('bracket.groupsNotFinalized'));
                 return;
             }
 
@@ -122,23 +178,30 @@ const TournamentMatchesPage = () => {
             await loadData();
             setActiveTab('knockout');
         } catch (error) {
-            alert(t('bracket.generateError'));
+            showError(t('bracket.generateError'));
         } finally {
             setProcessing(false);
         }
     };
 
-    const handleFinalizeGroup = async (groupName: string) => {
+    const handleFinalizeGroup = (groupName: string) => {
         if (!id) return;
-        const count = window.prompt(t('admin.tournaments.matches.finalizeDesc'), "2");
-        if (!count) return;
 
-        try {
-            await finalizeGroup(id, groupName, parseInt(count), selectedCategory === 'all' ? undefined : selectedCategory);
-            await loadData();
-        } catch (error) {
-            alert(t('admin.tournaments.matches.errorFinalizing'));
-        }
+        showInput(
+            t('admin.tournaments.finalizeGroup'),
+            t('admin.tournaments.matches.finalizeDesc'),
+            "2",
+            async (val) => {
+                if (!val) return;
+                try {
+                    await finalizeGroup(id, groupName, parseInt(val), selectedCategory === 'all' ? undefined : selectedCategory);
+                    await loadData();
+                    setInputModal(prev => ({ ...prev, open: false }));
+                } catch (error) {
+                    showError(t('admin.tournaments.matches.errorFinalizing'));
+                }
+            }
+        );
     };
 
     const handleOpenScore = (match: Match) => {
@@ -165,7 +228,7 @@ const TournamentMatchesPage = () => {
             setSelectedMatch(null);
             await loadData();
         } catch (error) {
-            alert(t('admin.tournaments.matches.errorSavingScore'));
+            showError(t('admin.tournaments.matches.errorSavingScore'));
         } finally {
             setProcessing(false);
         }
@@ -322,12 +385,16 @@ const TournamentMatchesPage = () => {
                                                         </button>
                                                     ) : (
                                                         <button
-                                                            onClick={async () => {
-                                                                if (window.confirm(t('common.undoConfirm'))) {
+                                                            onClick={() => showConfirmation(
+                                                                t('common.undo'),
+                                                                t('common.undoConfirm'),
+                                                                async () => {
                                                                     await unfinalizeGroup(id!, groupName, selectedCategory === 'all' ? undefined : selectedCategory);
                                                                     await loadData();
-                                                                }
-                                                            }}
+                                                                    setConfirmModal(prev => ({ ...prev, open: false }));
+                                                                },
+                                                                'danger'
+                                                            )}
                                                             className="text-xs font-black uppercase tracking-widest px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl border border-red-500/10 transition-all"
                                                         >
                                                             {t('common.undo')}
@@ -375,12 +442,16 @@ const TournamentMatchesPage = () => {
 
                         <div className="flex justify-center pt-10 border-t border-white/5 gap-4 no-print">
                             <button
-                                onClick={async () => {
-                                    if (window.confirm(t('admin.tournaments.resetGroupConfirm'))) {
+                                onClick={() => showConfirmation(
+                                    t('admin.tournaments.resetGroupStage'),
+                                    t('admin.tournaments.resetGroupConfirm'),
+                                    async () => {
                                         await resetGroupStage(id!, selectedCategory === 'all' ? undefined : selectedCategory);
                                         await loadData();
-                                    }
-                                }}
+                                        setConfirmModal(prev => ({ ...prev, open: false }));
+                                    },
+                                    'danger'
+                                )}
                                 className="text-xs font-black uppercase tracking-widest px-8 py-4 bg-red-500/5 hover:bg-red-500/10 text-red-500 rounded-2xl border border-red-500/10 transition-all"
                             >
                                 {t('admin.tournaments.resetGroupStage')}
@@ -466,12 +537,16 @@ const TournamentMatchesPage = () => {
 
                                 <div className="flex justify-center border-t border-white/5 pt-10 no-print">
                                     <button
-                                        onClick={async () => {
-                                            if (window.confirm(t('admin.tournaments.resetDrawConfirm'))) {
+                                        onClick={() => showConfirmation(
+                                            t('admin.tournaments.resetDraw'),
+                                            t('admin.tournaments.resetDrawConfirm'),
+                                            async () => {
                                                 await deleteBracketMatches(id!);
                                                 await loadData();
-                                            }
-                                        }}
+                                                setConfirmModal(prev => ({ ...prev, open: false }));
+                                            },
+                                            'danger'
+                                        )}
                                         className="text-xs font-black uppercase tracking-widest px-8 py-4 bg-red-500/5 hover:bg-red-500/10 text-red-500 rounded-2xl border border-red-500/10 transition-all"
                                     >
                                         {t('admin.tournaments.resetDraw')}
@@ -610,6 +685,91 @@ const TournamentMatchesPage = () => {
                     th, td { border-bottom: 1px solid #eee !important; color: black !important; }
                 }
             `}</style>
+
+            {/* Generic Confirmation Modal */}
+            {confirmModal.open && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in no-print">
+                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                            <AlertTriangle size={32} />
+                        </div>
+                        <div className="space-y-2">
+                            <h3 className="text-white text-2xl font-bold">{confirmModal.title}</h3>
+                            <p className="text-gray-400 leading-relaxed">{confirmModal.message}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            <button
+                                onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={confirmModal.onConfirm}
+                                disabled={processing}
+                                className={`py-4 rounded-2xl font-bold transition-colors flex items-center justify-center gap-2 ${confirmModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark'}`}
+                            >
+                                {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Modal */}
+            {errorModal.open && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-6 animate-fade-in no-print">
+                    <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                        <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
+                            <AlertTriangle size={32} />
+                        </div>
+                        <h3 className="text-white text-xl font-bold">{t('common.error')}</h3>
+                        <p className="text-gray-400">{errorModal.message}</p>
+                        <button
+                            onClick={() => setErrorModal(prev => ({ ...prev, open: false }))}
+                            className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                        >
+                            {t('common.close')}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Input Modal */}
+            {inputModal.open && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in no-print">
+                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                        <div className="space-y-2">
+                            <h3 className="text-white text-2xl font-bold">{inputModal.title}</h3>
+                            <p className="text-gray-400 leading-relaxed">{inputModal.description}</p>
+                        </div>
+
+                        <input
+                            type="number"
+                            autoFocus
+                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-2xl font-bold focus:outline-none focus:border-tennis-green/50"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                        />
+
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            <button
+                                onClick={() => setInputModal(prev => ({ ...prev, open: false }))}
+                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={() => inputModal.onConfirm(inputValue)}
+                                disabled={processing || !inputValue}
+                                className="py-4 rounded-2xl bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { TournamentPlayer } from './types';
 
@@ -70,4 +70,74 @@ export const rejectRegistration = async (tournamentId: string, playerId: string,
         console.error('Error rejecting registration:', error);
         throw error;
     }
+};
+
+export const subscribeToClubPendingRegistrations = (
+    clubId: string,
+    callback: (results: { tournamentId: string; tournamentName: string; player: TournamentPlayer }[]) => void
+) => {
+    const tournamentsQuery = query(
+        collection(db, 'tournaments'),
+        where('clubId', '==', clubId),
+        where('status', 'in', ['upcoming', 'active'])
+    );
+
+    const playerUnsubscribes: { [tournamentId: string]: () => void } = {};
+    const tournamentDataRecord: { [tournamentId: string]: { name: string } } = {};
+    const pendingByTournament: { [tournamentId: string]: TournamentPlayer[] } = {};
+
+    const emit = () => {
+        const consolidated: { tournamentId: string; tournamentName: string; player: TournamentPlayer }[] = [];
+        Object.keys(pendingByTournament).forEach(tId => {
+            const tName = tournamentDataRecord[tId]?.name || 'Unknown';
+            pendingByTournament[tId].forEach(player => {
+                consolidated.push({ tournamentId: tId, tournamentName: tName, player });
+            });
+        });
+        // Sort by addedAt descending
+        consolidated.sort((a, b) => (b.player.addedAt?.seconds || 0) - (a.player.addedAt?.seconds || 0));
+        callback(consolidated);
+    };
+
+    const unsubTournaments = onSnapshot(tournamentsQuery, (snapshot) => {
+        const currentTournamentIds = snapshot.docs.map(doc => doc.id);
+
+        Object.keys(playerUnsubscribes).forEach(tId => {
+            if (!currentTournamentIds.includes(tId)) {
+                playerUnsubscribes[tId]();
+                delete playerUnsubscribes[tId];
+                delete tournamentDataRecord[tId];
+                delete pendingByTournament[tId];
+            }
+        });
+
+        snapshot.docs.forEach(tDoc => {
+            const tId = tDoc.id;
+            const tName = tDoc.data().name;
+            tournamentDataRecord[tId] = { name: tName };
+
+            if (!playerUnsubscribes[tId]) {
+                const playersQuery = query(
+                    collection(db, 'tournaments', tId, 'players'),
+                    where('registrationStatus', '==', 'pending'),
+                    orderBy('addedAt', 'desc')
+                );
+
+                playerUnsubscribes[tId] = onSnapshot(playersQuery, (pSnapshot) => {
+                    pendingByTournament[tId] = pSnapshot.docs.map(pDoc => ({ id: pDoc.id, ...pDoc.data() } as TournamentPlayer));
+                    emit();
+                }, (error) => {
+                    console.error(`Error listening to players for tournament ${tId}:`, error);
+                });
+            }
+        });
+        emit();
+    }, (error) => {
+        console.error('Error listening to club tournaments:', error);
+    });
+
+    return () => {
+        unsubTournaments();
+        Object.values(playerUnsubscribes).forEach(unsub => unsub());
+    };
 };
