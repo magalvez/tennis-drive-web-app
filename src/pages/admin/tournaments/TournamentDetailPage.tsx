@@ -16,8 +16,10 @@ import {
     X,
     AlertTriangle,
     RefreshCw,
-    MessageCircle
+    MessageCircle,
+    Scan
 } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLanguage } from '../../../context/LanguageContext';
@@ -46,6 +48,7 @@ const TournamentDetailPage = () => {
     // Modals
     const [showCommModal, setShowCommModal] = useState(false);
     const [showScoringModal, setShowScoringModal] = useState(false);
+    const [showQRModal, setShowQRModal] = useState(false); // Check-in QR
     const [commTitle, setCommTitle] = useState('');
     const [commBody, setCommBody] = useState('');
     const [sending, setSending] = useState(false);
@@ -357,6 +360,13 @@ const TournamentDetailPage = () => {
                     color="purple-400"
                     onClick={() => setShowChatModal(true)}
                 />
+                <ActionCard
+                    title={t('admin.tournaments.checkIn.title') || "Check-In QR"}
+                    desc={t('admin.tournaments.checkIn.desc') || "Player Check-In Code"}
+                    icon={Scan}
+                    color="pink-400"
+                    onClick={() => setShowQRModal(true)}
+                />
             </div>
 
             {/* Modal: Communication Center */}
@@ -521,6 +531,41 @@ const TournamentDetailPage = () => {
                                     {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
                                     {t('admin.tournaments.chat.save')}
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Modal: Check-In QR */}
+            {showQRModal && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowQRModal(false)}></div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.checkIn.modalTitle') || "Tournament Check-In"}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.checkIn.modalDesc') || "Scan to check in"}</p>
+                                </div>
+                                <button onClick={() => setShowQRModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="flex justify-center items-center flex-col gap-6">
+                                <div className="p-4 bg-white rounded-3xl">
+                                    <QRCodeCanvas
+                                        value={JSON.stringify({
+                                            type: 'CHECK_IN',
+                                            tournamentId: tournament?.id || '',
+                                            tournamentName: tournament?.name || 'Tournament'
+                                        })}
+                                        size={250}
+                                        level={'H'}
+                                    />
+                                </div>
+                                <p className="text-gray-400 text-sm text-center max-w-xs">{t('admin.tournaments.checkIn.instruction') || "Players can scan this code from their app to confirm attendance."}</p>
                             </div>
                         </div>
                     </div>

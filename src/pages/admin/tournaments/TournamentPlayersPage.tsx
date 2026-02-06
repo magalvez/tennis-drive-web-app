@@ -522,6 +522,12 @@ const TournamentPlayersPage = () => {
                                                     {t('admin.tournaments.seedNum', { num: player.seed })}
                                                 </span>
                                             )}
+                                            {player.isCheckedIn && (
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/20 flex items-center gap-1">
+                                                    <CheckCircle2 size={10} />
+                                                    {t('admin.tournaments.checkIn.title') || "Checked In"}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

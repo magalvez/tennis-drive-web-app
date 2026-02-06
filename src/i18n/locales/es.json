@@ -471,6 +471,13 @@
                 "readOnlyDesc": "Los jugadores solo pueden leer",
                 "save": "Guardar Ajustes"
             },
+            "checkIn": {
+                "title": "QR Check-In",
+                "desc": "Código para Check-In",
+                "modalTitle": "Check-In Torneo",
+                "modalDesc": "Escanear para confirmar asistencia",
+                "instruction": "Los jugadores pueden escanear este código desde la app."
+            },
             "edit": {
                 "title": "Editar Torneo",
                 "subtitle": "Refinar Detalles",

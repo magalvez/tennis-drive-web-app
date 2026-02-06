@@ -464,6 +464,13 @@
                 "readOnlyDesc": "Players can only read messages",
                 "save": "Save Chat Settings"
             },
+            "checkIn": {
+                "title": "Check-In QR",
+                "desc": "Player Check-In Code",
+                "modalTitle": "Tournament Check-In",
+                "modalDesc": "Scan to check in",
+                "instruction": "Players can scan this code from their app to confirm attendance."
+            },
             "edit": {
                 "title": "Edit Tournament",
                 "subtitle": "Refine Event Details",

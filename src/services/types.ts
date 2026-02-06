@@ -54,6 +54,8 @@ export interface TournamentPlayer {
     registrationStatus?: 'approved' | 'pending' | 'rejected';
     clubId?: string;
     tournamentName?: string;
+    isCheckedIn?: boolean;
+    checkInTime?: Timestamp;
 }
 
 export interface Match {
