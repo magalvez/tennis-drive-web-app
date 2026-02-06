@@ -15,7 +15,8 @@ import {
     Users,
     X,
     AlertTriangle,
-    RefreshCw
+    RefreshCw,
+    MessageCircle
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -48,6 +49,11 @@ const TournamentDetailPage = () => {
     const [commTitle, setCommTitle] = useState('');
     const [commBody, setCommBody] = useState('');
     const [sending, setSending] = useState(false);
+
+    // Chat Settings State
+    const [showChatModal, setShowChatModal] = useState(false);
+    const [chatEnabled, setChatEnabled] = useState(true);
+    const [chatReadOnly, setChatReadOnly] = useState(false);
 
     const [localScoring, setLocalScoring] = useState<ScoringConfig>({
         win: 50,
@@ -84,6 +90,9 @@ const TournamentDetailPage = () => {
             if (data?.scoringConfig) {
                 setLocalScoring(data.scoringConfig);
             }
+            // Initialize Chat Settings (default to true/false if undefined)
+            setChatEnabled(data?.isChatEnabled !== false); // Default enabled if undefined
+            setChatReadOnly(data?.isChatReadOnly === true); // Default writable if undefined
         } catch (error) {
             console.error(error);
             showInfo(t('common.error'), t('admin.tournaments.fetchError'));
@@ -147,6 +156,27 @@ const TournamentDetailPage = () => {
             setTournament({ ...tournament, scoringConfig: localScoring });
             setShowScoringModal(false);
             showInfo(t('common.success'), "Scoring configuration updated!", 'success');
+        } catch (error) {
+            showInfo(t('common.error'), t('common.error'));
+            setUpdating(false);
+        }
+    };
+
+    const handleSaveChatSettings = async () => {
+        if (!id || !tournament) return;
+        setUpdating(true);
+        try {
+            await updateTournament(id, {
+                isChatEnabled: chatEnabled,
+                isChatReadOnly: chatReadOnly
+            });
+            setTournament({
+                ...tournament,
+                isChatEnabled: chatEnabled,
+                isChatReadOnly: chatReadOnly
+            });
+            setShowChatModal(false);
+            showInfo(t('common.success'), t('config.success'), 'success');
         } catch (error) {
             showInfo(t('common.error'), t('common.error'));
         } finally {
@@ -320,6 +350,13 @@ const TournamentDetailPage = () => {
                     color="gray-400"
                     onClick={() => setShowScoringModal(true)}
                 />
+                <ActionCard
+                    title={t('admin.tournaments.chat.title')}
+                    desc={t('admin.tournaments.chat.subtitle')}
+                    icon={MessageCircle}
+                    color="purple-400"
+                    onClick={() => setShowChatModal(true)}
+                />
             </div>
 
             {/* Modal: Communication Center */}
@@ -430,7 +467,65 @@ const TournamentDetailPage = () => {
                     </div>
                 </>
             )}
-            {/* Delete Confirmation Modal */}
+
+            {/* Modal: Chat Settings */}
+            {showChatModal && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowChatModal(false)}></div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.chat.title')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.chat.subtitle')}</p>
+                                </div>
+                                <button onClick={() => setShowChatModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Toggle: Enable Chat */}
+                                <div
+                                    onClick={() => setChatEnabled(!chatEnabled)}
+                                    className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${chatEnabled ? 'bg-tennis-green/10 border-tennis-green' : 'bg-white/5 border-white/10'}`}
+                                >
+                                    <div>
+                                        <h3 className={`font-bold ${chatEnabled ? 'text-tennis-green' : 'text-gray-400'}`}>{t('admin.tournaments.chat.enableLobby')}</h3>
+                                        <p className="text-gray-500 text-xs mt-1">{t('admin.tournaments.chat.enableLobbyDesc')}</p>
+                                    </div>
+                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors ${chatEnabled ? 'bg-tennis-green' : 'bg-gray-600'}`}>
+                                        <div className={`w-4 h-4 rounded-full bg-black shadow-md transform transition-transform ${chatEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                    </div>
+                                </div>
+
+                                {/* Toggle: Read Only */}
+                                <div
+                                    onClick={() => setChatReadOnly(!chatReadOnly)}
+                                    className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${chatReadOnly ? 'bg-orange-500/10 border-orange-500' : 'bg-white/5 border-white/10'}`}
+                                >
+                                    <div>
+                                        <h3 className={`font-bold ${chatReadOnly ? 'text-orange-500' : 'text-gray-400'}`}>{t('admin.tournaments.chat.readOnly')}</h3>
+                                        <p className="text-gray-500 text-xs mt-1">{t('admin.tournaments.chat.readOnlyDesc')}</p>
+                                    </div>
+                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors ${chatReadOnly ? 'bg-orange-500' : 'bg-gray-600'}`}>
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${chatReadOnly ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleSaveChatSettings}
+                                    disabled={updating}
+                                    className="w-full bg-white text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 hover:bg-gray-200"
+                                >
+                                    {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
+                                    {t('admin.tournaments.chat.save')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
                     <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl transform scale-100 transition-all">

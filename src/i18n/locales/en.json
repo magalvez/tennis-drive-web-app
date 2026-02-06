@@ -455,6 +455,15 @@
                 "withdraw": "Withdraw",
                 "info": "Override club default scoring for this tournament"
             },
+            "chat": {
+                "title": "Chat Lobby Settings",
+                "subtitle": "Enable/Disable Feature",
+                "enableLobby": "Enable Lobby",
+                "enableLobbyDesc": "Allow players to access the chat",
+                "readOnly": "Read Only Mode",
+                "readOnlyDesc": "Players can only read messages",
+                "save": "Save Chat Settings"
+            },
             "edit": {
                 "title": "Edit Tournament",
                 "subtitle": "Refine Event Details",

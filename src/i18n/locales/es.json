@@ -143,6 +143,13 @@
             "groups": "Grupos",
             "standings": "Posiciones",
             "knockout": "Cuadro"
+        },
+        "chat": {
+            "title": "Lobby",
+            "placeholder": "Escribe un mensaje...",
+            "empty": "Aún no hay mensajes. ¡Inicia la conversación!",
+            "joinToChat": "Únete al Torneo para Chatear",
+            "joinToChatDesc": "Solo jugadores registrados pueden acceder al lobby."
         }
     },
     "ranking": {
@@ -454,6 +461,15 @@
                 "loss": "Derrota",
                 "withdraw": "Retiro",
                 "info": "Anular puntuación club para este torneo"
+            },
+            "chat": {
+                "title": "Ajustes del Lobby",
+                "subtitle": "Habilitar/Deshabilitar el Chat",
+                "enableLobby": "Habilitar Sala",
+                "enableLobbyDesc": "Permitir a jugadores acceder",
+                "readOnly": "Modo Lectura",
+                "readOnlyDesc": "Los jugadores solo pueden leer",
+                "save": "Guardar Ajustes"
             },
             "edit": {
                 "title": "Editar Torneo",

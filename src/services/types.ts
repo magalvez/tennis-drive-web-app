@@ -31,6 +31,8 @@ export interface TournamentData {
     image?: string | null;
     scoringConfig?: ScoringConfig;
     categories?: TournamentCategory[];
+    isChatEnabled?: boolean;
+    isChatReadOnly?: boolean;
 }
 
 export interface TournamentPlayer {
