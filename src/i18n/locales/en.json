@@ -624,6 +624,8 @@
                 "cannotGenerateDesc": "The draw cannot be generated if the tournament has already started or finished.",
                 "notEnoughPlayers": "Not Enough Players",
                 "notEnoughPlayersDesc": "You need at least 2 players to generate a draw.",
+                "playersNotReady": "Players Not Ready",
+                "playersNotReadyDesc": "All players must be checked in and paid (or wildcard) to generate the draw.",
                 "generateTitle": "Generate Round Robin",
                 "generateConfirm": "This will create matches for %{count} players. Proceed?",
                 "generateBtn": "Generate",

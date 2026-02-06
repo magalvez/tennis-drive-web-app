@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, increment, orderBy, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, increment, orderBy, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { formatMatchScore } from '../utils/scoring';
 import { logActivity } from './activityService';
@@ -118,6 +118,13 @@ export const assignGroupsToPlayers = async (tournamentId: string, numberOfGroups
         let players = await getTournamentPlayers(tournamentId);
         if (category) players = players.filter(p => p.category === category);
         if (players.length === 0) throw new Error("No players found");
+
+        // Validation: All players must be checked in and (paid or wildcard)
+        const unreadyPlayers = players.filter(p => !p.isCheckedIn || (p.paymentStatus !== 'paid' && !p.isWildcard));
+        if (unreadyPlayers.length > 0) {
+            const names = unreadyPlayers.map(p => p.name).join(", ");
+            throw new Error(`PLAYERS_NOT_READY: ${names}`);
+        }
 
         // 1. Fetch points for players who don't have a manual seed
         const playersWithRank = await Promise.all(
@@ -431,6 +438,41 @@ export const deleteManualPlayers = async (tournamentId: string) => {
         return count;
     } catch (error) {
         console.error(error);
+        throw error;
+    }
+};
+
+export const checkInPlayer = async (tournamentId: string, playerId: string, playerUid?: string, value: boolean = true) => {
+    try {
+        const batch = writeBatch(db);
+
+        // 1. Update the specific document by ID (ensures it works for guests/manual players)
+        const playerRef = doc(db, "tournaments", tournamentId, "players", playerId);
+        batch.update(playerRef, {
+            isCheckedIn: value,
+            checkInTime: value ? Timestamp.now() : deleteField()
+        });
+
+        // 2. If a UID is provided, update all other documents with the same UID correctly
+        if (playerUid && playerUid !== 'guest') {
+            const q = query(
+                collection(db, "tournaments", tournamentId, "players"),
+                where("uid", "==", playerUid)
+            );
+            const snapshot = await getDocs(q);
+            snapshot.docs.forEach(d => {
+                if (d.id !== playerId) {
+                    batch.update(d.ref, {
+                        isCheckedIn: value,
+                        checkInTime: value ? Timestamp.now() : deleteField()
+                    });
+                }
+            });
+        }
+
+        await batch.commit();
+    } catch (error) {
+        console.error("Error checking in player:", error);
         throw error;
     }
 };

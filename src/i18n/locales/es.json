@@ -631,6 +631,8 @@
                 "cannotGenerateDesc": "No puedes generar si ya empezó.",
                 "notEnoughPlayers": "Insuficientes",
                 "notEnoughPlayersDesc": "Mínimo 2 jugadores.",
+                "playersNotReady": "Jugadores No Listos",
+                "playersNotReadyDesc": "Todos los jugadores deben estar registrados (Check-In) y haber pagado (o ser Wildcard) para generar el cuadro.",
                 "generateTitle": "Generar Round Robin",
                 "generateConfirm": "Creará partidos para %{count}. ¿Continuar?",
                 "generateBtn": "Generar",

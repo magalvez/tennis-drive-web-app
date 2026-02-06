@@ -26,6 +26,7 @@ import {
     addPlayerToTournament,
     autoSeedPlayers,
     CATEGORY_ORDER,
+    checkInPlayer,
     deleteManualPlayers,
     getTournamentById,
     getTournamentPlayers,
@@ -43,6 +44,7 @@ const TournamentPlayersPage = () => {
 
     const [tournament, setTournament] = useState<TournamentData | null>(null);
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
+    const [playerPoints, setPlayerPoints] = useState<{ [uid: string]: number }>({});
     const [pendingRegs, setPendingRegs] = useState<TournamentPlayer[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
@@ -104,6 +106,27 @@ const TournamentPlayersPage = () => {
             setTournament(tData);
             setPlayers(pData);
             setPendingRegs(rData);
+
+            // Fetch points from club
+            if (tData?.clubId) {
+                const { doc, getDoc } = await import('firebase/firestore');
+                const pointsMap: { [uid: string]: number } = {};
+
+                await Promise.all(pData.map(async (p) => {
+                    if (p.uid && !p.isManual) {
+                        try {
+                            const userDoc = await getDoc(doc(db, 'users', p.uid));
+                            if (userDoc.exists()) {
+                                const userData = userDoc.data();
+                                pointsMap[p.uid] = userData.clubs?.[tData.clubId!]?.points ?? 0;
+                            }
+                        } catch (e) {
+                            console.warn(`Points fetch error for ${p.uid}`, e);
+                        }
+                    }
+                }));
+                setPlayerPoints(pointsMap);
+            }
         } catch (error) {
             console.error(error);
         } finally {
@@ -292,6 +315,20 @@ const TournamentPlayersPage = () => {
             setProcessing(false);
         }
     };
+
+    const handleToggleCheckIn = async (player: TournamentPlayer) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            const newValue = !player.isCheckedIn;
+            await checkInPlayer(id, player.id, player.uid, newValue);
+            await loadData();
+        } catch (error) {
+            showError(t('admin.tournaments.errorCheckIn') || "Error during check-in");
+        } finally {
+            setProcessing(false);
+        }
+    };
     const handleAutoSeed = async () => {
         if (!id || processing) return;
         setProcessing(true);
@@ -360,10 +397,25 @@ const TournamentPlayersPage = () => {
         );
     };
 
-    const filteredPlayers = players.filter(p =>
-        p.registrationStatus === 'approved' &&
-        (selectedCategory === 'all' || p.category === selectedCategory)
-    );
+    const filteredPlayers = players
+        .filter(p =>
+            p.registrationStatus === 'approved' &&
+            (selectedCategory === 'all' || p.category === selectedCategory)
+        )
+        .sort((a, b) => {
+            // 1. Seed Ascending (nulls last)
+            const seedA = a.seed ?? Infinity;
+            const seedB = b.seed ?? Infinity;
+            if (seedA !== seedB) return seedA - seedB;
+
+            // 2. Points Descending
+            const pointsA = playerPoints[a.uid || ''] ?? 0;
+            const pointsB = playerPoints[b.uid || ''] ?? 0;
+            if (pointsA !== pointsB) return pointsB - pointsA;
+
+            // 3. Name Ascending
+            return a.name.localeCompare(b.name);
+        });
 
     if (loading) return (
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -533,6 +585,13 @@ const TournamentPlayersPage = () => {
                                 </div>
 
                                 <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                    <button
+                                        onClick={() => handleToggleCheckIn(player)}
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.isCheckedIn ? 'bg-pink-500/20 text-pink-400' : 'bg-white/5 text-gray-700 hover:bg-pink-500/10 hover:text-pink-400'}`}
+                                        title={player.isCheckedIn ? (t('admin.tournaments.checkIn.revert') || "Revert Check In") : (t('admin.tournaments.checkIn.title') || "Check In")}
+                                    >
+                                        <CheckCircle2 size={20} />
+                                    </button>
                                     <button
                                         onClick={() => { setSelectedPlayer(player); setSeedValue(player.seed?.toString() || ''); setShowSeedModal(true); }}
                                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.seed ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-gray-700 hover:text-white'}`}

@@ -134,29 +134,58 @@ const TournamentMatchesPage = () => {
         loadData();
     }, [loadData]);
 
-    const handleGenerateGroups = () => {
+    const handleGenerateGroups = async () => {
         if (!id || processing) return;
 
-        showInput(
-            t('admin.tournaments.generateGroups'),
-            t('admin.tournaments.matches.enterGroups'),
-            "4",
-            async (val) => {
-                if (!val) return;
-                setProcessing(true);
-                try {
-                    const cat = selectedCategory === 'all' ? undefined : selectedCategory;
-                    await assignGroupsToPlayers(id, parseInt(val), cat);
-                    await generateGroupStageMatches(id, cat);
-                    await loadData();
-                    setInputModal(prev => ({ ...prev, open: false }));
-                } catch (error) {
-                    showError(t('admin.tournaments.matches.errorGroups'));
-                } finally {
-                    setProcessing(false);
-                }
+        setProcessing(true);
+        try {
+            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
+            const players = await getTournamentPlayers(id);
+            const filteredPlayers = cat ? players.filter(p => p.category === cat) : players;
+
+            // Validation: All players must be checked in and (paid or wildcard)
+            const unreadyPlayers = filteredPlayers.filter(p => !p.isCheckedIn || (p.paymentStatus !== 'paid' && !p.isWildcard));
+
+            if (unreadyPlayers.length > 0) {
+                const names = unreadyPlayers.map(p => p.name).join(", ");
+                showError(`${t('admin.tournaments.matches.playersNotReady')}: ${names}`);
+                return;
             }
-        );
+
+            if (filteredPlayers.length < 2) {
+                showError(t('admin.tournaments.matches.notEnoughPlayers'));
+                return;
+            }
+
+            showInput(
+                t('admin.tournaments.generateGroups'),
+                t('admin.tournaments.matches.enterGroups'),
+                "4",
+                async (val) => {
+                    if (!val) return;
+                    setProcessing(true);
+                    try {
+                        await assignGroupsToPlayers(id, parseInt(val), cat);
+                        await generateGroupStageMatches(id, cat);
+                        await loadData();
+                        setInputModal(prev => ({ ...prev, open: false }));
+                    } catch (error: any) {
+                        if (error.message?.startsWith('PLAYERS_NOT_READY:')) {
+                            showError(error.message.replace('PLAYERS_NOT_READY: ', ''));
+                        } else {
+                            showError(t('admin.tournaments.matches.errorGroups'));
+                        }
+                    } finally {
+                        setProcessing(false);
+                    }
+                }
+            );
+        } catch (error) {
+            console.error(error);
+            showError(t('common.error'));
+        } finally {
+            setProcessing(false);
+        }
     };
 
     const handleGenerateKnockout = async () => {
