@@ -524,13 +524,16 @@ const TournamentPlayersPage = () => {
                             >
                                 {t('common.allCategories')}
                             </button>
-                            {tournament.categories.map(cat => (
+                            {[...(tournament.categories || [])].sort((a, b) => {
+                                const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
+                                return order.indexOf(a.toUpperCase()) - order.indexOf(b.toUpperCase());
+                            }).map(cat => (
                                 <button
                                     key={cat}
                                     onClick={() => setSelectedCategory(cat)}
-                                    className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === cat ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                                    className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === cat ? 'bg-white text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
                                 >
-                                    {cat}
+                                    {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
                                 </button>
                             ))}
                         </div>
@@ -569,11 +572,16 @@ const TournamentPlayersPage = () => {
                                         <p className="text-gray-500 text-xs">{player.email || t('admin.tournaments.noEmail')}</p>
                                         <div className="flex items-center gap-4 mt-2">
                                             <span className="text-[10px] font-black uppercase tracking-widest text-tennis-green bg-tennis-green/5 px-2 py-0.5 rounded border border-tennis-green/10">
-                                                {player.category || t('admin.tournaments.noCategory')}
+                                                {player.category ? t(`admin.tournaments.categories.${player.category.toLowerCase()}`) : t('admin.tournaments.noCategory')}
                                             </span>
                                             <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${player.paymentStatus === 'paid' ? 'text-blue-400 bg-blue-500/5 border-blue-500/10' : 'text-gray-600 bg-white/5 border-white/5'}`}>
                                                 {player.paymentStatus === 'paid' ? t('common.paid') : t('common.unpaid')}
                                             </span>
+                                            {player.registrationStatus === 'rejected' && (
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                                                    {t('common.rejected') || 'Rejected'}
+                                                </span>
+                                            )}
                                             {player.seed && (
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10">
                                                     {t('admin.tournaments.seedNum', { num: player.seed })}
@@ -839,7 +847,7 @@ const TournamentPlayersPage = () => {
                                                 onClick={() => setRandomCategory(cat === randomCategory ? null : cat)}
                                                 className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${randomCategory === cat ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/20'}`}
                                             >
-                                                {cat}
+                                                {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
                                             </button>
                                         ))}
                                     </div>
@@ -916,7 +924,7 @@ const TournamentPlayersPage = () => {
 
             {/* Generic Confirmation Modal */}
             {confirmModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fade-in">
                     <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
                         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
                             <AlertTriangle size={32} />
@@ -946,7 +954,7 @@ const TournamentPlayersPage = () => {
 
             {/* Error Modal */}
             {errorModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-6 animate-fade-in">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in">
                     <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
                         <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
                             <AlertTriangle size={32} />

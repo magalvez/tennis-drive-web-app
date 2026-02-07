@@ -25,6 +25,8 @@
         "exportPDF": "Exportar PDF",
         "finalized": "Finalizado",
         "inProgress": "En Curso",
+        "scheduled": "Programado",
+        "pending": "Pendiente",
         "admin": "Administrador",
         "confirmResult": "Confirmar Resultado",
         "none": "Ninguna",
@@ -168,7 +170,8 @@
             "upcoming": "Próximo",
             "active": "Activo",
             "completed": "Finalizado",
-            "pending": "Pendiente"
+            "pending": "Pendiente",
+            "scheduled": "Programado"
         },
         "free": "Gratis",
         "prize": "Premio",
@@ -188,7 +191,8 @@
             "empty": "Aún no hay mensajes. ¡Inicia la conversación!",
             "joinToChat": "Únete al Torneo para Chatear",
             "joinToChatDesc": "Solo jugadores registrados pueden acceder al lobby."
-        }
+        },
+        "group": "Grupo"
     },
     "ranking": {
         "title": "Top Jugadores",
@@ -663,7 +667,6 @@
             },
             "matches": {
                 "title": "Partidos",
-                "scheduled": "Programados",
                 "drawExists": "Ya existe",
                 "drawExistsDesc": "Ya se generaron partidos.",
                 "cannotGenerate": "No se puede",
@@ -697,6 +700,8 @@
                 },
                 "finalized": "Finalizado",
                 "inProgress": "En Curso",
+                "scheduled": "Programado",
+                "pending": "Pendiente",
                 "noKnockout": "Sin partidos de cuadro.",
                 "knockoutReady": "Fase grupos en curso. Genera cuando terminen.",
                 "finalizeGroup": "Finalizar Grupo %{name}",
@@ -713,6 +718,7 @@
                 "removePlayerConfirm": "Borrará todos sus partidos. ¿Continuar?",
                 "addPlayerError": "Error al añadir.",
                 "removePlayerError": "Error al quitar.",
+                "errorGroupFinalized": "El grupo está finalizado. Deshaz la finalización para gestionar jugadores.",
                 "errorGroups": "Error al generar grupos",
                 "errorFinalizing": "Error al finalizar grupo",
                 "errorSavingScore": "Error al guardar marcador",

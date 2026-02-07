@@ -11,14 +11,31 @@ import {
     Trophy,
     Users,
     X,
-    AlertTriangle
+    AlertTriangle,
+    Settings,
+    Wand2,
+    Trash2,
+    Zap,
+    UserPlus,
+    UserMinus
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLanguage } from '../../../context/LanguageContext';
 import BracketView from '../../../components/admin/BracketView';
 import { deleteBracketMatches, generateMainDraw } from '../../../services/bracketService';
-import { finalizeGroup, getGroups, getQualifiedPlayers, getTournamentStandings, unfinalizeGroup } from '../../../services/groupService';
+import {
+    finalizeGroup,
+    getGroups,
+    getQualifiedPlayers,
+    getTournamentStandings,
+    unfinalizeGroup,
+    areAllGroupsFinalized,
+    addPlayerToGroup,
+    removePlayerFromGroup,
+    getPlayersWithoutGroup,
+    getGroupPlayers
+} from '../../../services/groupService';
 import {
     assignGroupsToPlayers,
     generateGroupStageMatches,
@@ -26,7 +43,9 @@ import {
     getTournamentMatches,
     getTournamentPlayers,
     resetGroupStage,
-    saveMatchScoreByAdmin
+    saveMatchScoreByAdmin,
+    simulateGroupMatchResults,
+    updateTournament
 } from '../../../services/tournamentService';
 import type { GroupStanding, Match, TournamentCategory, TournamentData, TournamentGroup } from '../../../services/types';
 import { calculateWinner, formatMatchScore, type SetScore } from '../../../utils/scoring';
@@ -79,6 +98,16 @@ const TournamentMatchesPage = () => {
     }>({ open: false, title: '', description: '', defaultValue: '', onConfirm: async () => { } });
     const [inputValue, setInputValue] = useState('');
 
+    // Admin Tools State
+    const [isAdminToolsOpen, setIsAdminToolsOpen] = useState(false);
+    const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
+    const [isRemovePlayerModalOpen, setIsRemovePlayerModalOpen] = useState(false);
+    const [scoringConfig, setScoringConfig] = useState(tournament?.scoringConfig || { win: 3, loss: 0, withdraw: 0 });
+    const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
+    const [groupPlayers, setGroupPlayers] = useState<any[]>([]);
+    const [selectedGroupForManagement, setSelectedGroupForManagement] = useState<string | null>(null);
+    const [selectedCategoryForManagement, setSelectedCategoryForManagement] = useState<TournamentCategory | undefined>(undefined);
+
     const showError = (msg: string) => {
         setErrorModal({ open: true, message: msg });
     };
@@ -119,6 +148,10 @@ const TournamentMatchesPage = () => {
             setMatches(mData);
             setGroups(gData);
             setStandings(sData);
+
+            if (tData?.scoringConfig) {
+                setScoringConfig(tData.scoringConfig);
+            }
 
             if (tData?.categories?.length && selectedCategory === 'all') {
                 setSelectedCategory(tData.categories[0]);
@@ -165,7 +198,9 @@ const TournamentMatchesPage = () => {
                     if (!val) return;
                     setProcessing(true);
                     try {
-                        await assignGroupsToPlayers(id, parseInt(val), cat);
+                        // Filter players to include only approved registrations before assigning groups
+                        const approvedPlayers = players.filter(p => p.registrationStatus === 'approved');
+                        await assignGroupsToPlayers(id, parseInt(val), cat, approvedPlayers);
                         await generateGroupStageMatches(id, cat);
                         await loadData();
                         setInputModal(prev => ({ ...prev, open: false }));
@@ -194,14 +229,26 @@ const TournamentMatchesPage = () => {
         try {
             const cat = selectedCategory === 'all' ? undefined : selectedCategory;
             const qualifiers = await getQualifiedPlayers(id, cat);
-            if (qualifiers.length < 2) {
+            const allGroupsFinalized = await areAllGroupsFinalized(id, cat);
+
+            if (!allGroupsFinalized) {
                 showError(t('bracket.groupsNotFinalized'));
                 return;
             }
 
-            // Fetch full player objects to get seeds
+            if (qualifiers.length < 2) {
+                showError(t('bracket.notEnoughQualifiers'));
+                return;
+            }
+
+            // Fetch full player objects for qualifiers using their specific document ID (q.id)
+            // This prevents picking up multiple registrations
             const allPlayers = await getTournamentPlayers(id);
-            const qualifiedPlayers = allPlayers.filter(p => qualifiers.some(q => q.uid === p.uid));
+            const qualifiedPlayerIds = qualifiers.map(q => q.id);
+            const qualifiedPlayers = allPlayers.filter(p =>
+                qualifiedPlayerIds.includes(p.id) &&
+                p.registrationStatus !== 'rejected'
+            );
 
             await generateMainDraw(id, qualifiedPlayers, cat);
             await loadData();
@@ -273,6 +320,109 @@ const TournamentMatchesPage = () => {
         if (win) setWinnerId(win);
     };
 
+    // Admin Tools Handlers
+    const handleSimulateResults = async () => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
+            await simulateGroupMatchResults(id, cat);
+            await loadData();
+            setIsAdminToolsOpen(false);
+        } catch (error) {
+            console.error(error);
+            showError(t('common.error'));
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleUpdateScoring = async () => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            await updateTournament(id, { scoringConfig });
+            await loadData();
+            setIsAdminToolsOpen(false);
+        } catch (error) {
+            console.error(error);
+            showError(t('admin.tournaments.updateError'));
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleOpenAddPlayer = async (groupName: string, category?: TournamentCategory) => {
+        if (!id) return;
+        const group = groups.find(g => g.name === groupName && (category ? g.category === category : true));
+        if (group?.status === 'completed') {
+            showError(t('admin.tournaments.matches.errorGroupFinalized'));
+            return;
+        }
+
+        try {
+            const players = await getPlayersWithoutGroup(id, category);
+            setAvailablePlayers(players);
+            setSelectedGroupForManagement(groupName);
+            setSelectedCategoryForManagement(category);
+            setIsAddPlayerModalOpen(true);
+            setIsAdminToolsOpen(false);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleAddPlayer = async (playerId: string) => {
+        if (!id || !selectedGroupForManagement) return;
+        setProcessing(true);
+        try {
+            await addPlayerToGroup(id, selectedGroupForManagement, playerId, selectedCategoryForManagement);
+            await loadData();
+            setIsAddPlayerModalOpen(false);
+        } catch (error) {
+            console.error(error);
+            showError(t('admin.tournaments.matches.addPlayerError'));
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleOpenRemovePlayer = async (groupName: string, category?: TournamentCategory) => {
+        if (!id) return;
+        const group = groups.find(g => g.name === groupName && (category ? g.category === category : true));
+        if (group?.status === 'completed') {
+            showError(t('admin.tournaments.matches.errorGroupFinalized'));
+            return;
+        }
+
+        try {
+            const players = await getGroupPlayers(id, groupName, category);
+            setGroupPlayers(players);
+            setSelectedGroupForManagement(groupName);
+            setSelectedCategoryForManagement(category);
+            setIsRemovePlayerModalOpen(true);
+            setIsAdminToolsOpen(false);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleRemovePlayer = async (playerId: string) => {
+        if (!id || !selectedGroupForManagement) return;
+        setProcessing(true);
+        try {
+            await removePlayerFromGroup(id, selectedGroupForManagement, playerId, selectedCategoryForManagement);
+            await loadData();
+            setIsRemovePlayerModalOpen(false);
+            setConfirmModal(prev => ({ ...prev, open: false }));
+        } catch (error) {
+            console.error(error);
+            showError(t('admin.tournaments.matches.removePlayerError'));
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     const groupMatches = matches.filter(m =>
         !!m.group && (selectedCategory === 'all' || m.category === selectedCategory)
     );
@@ -320,6 +470,13 @@ const TournamentMatchesPage = () => {
                         <FileText size={18} />
                         {t('common.exportPDF')}
                     </button>
+                    <button
+                        onClick={() => setIsAdminToolsOpen(true)}
+                        className="bg-white/5 hover:bg-white/10 text-white p-3 rounded-xl transition-all border border-white/5"
+                        title={t('admin.tournaments.tools.title')}
+                    >
+                        <Settings size={20} />
+                    </button>
                     <div className="flex items-center gap-3 bg-white/5 p-1 rounded-2xl border border-white/5">
                         <button
                             onClick={() => setActiveTab('groups')}
@@ -349,7 +506,10 @@ const TournamentMatchesPage = () => {
             {/* Category Filter */}
             {tournament?.categories && tournament.categories.length > 0 && (
                 <div className="flex items-center gap-4 overflow-x-auto pb-2 no-scrollbar no-print">
-                    {tournament.categories.map((cat) => (
+                    {[...(tournament.categories || [])].sort((a, b) => {
+                        const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
+                        return order.indexOf(a.toUpperCase()) - order.indexOf(b.toUpperCase());
+                    }).map((cat) => (
                         <button
                             key={cat}
                             onClick={() => setSelectedCategory(cat)}
@@ -358,7 +518,7 @@ const TournamentMatchesPage = () => {
                                 : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'
                                 }`}
                         >
-                            {cat}
+                            {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
                         </button>
                     ))}
                 </div>
@@ -442,7 +602,7 @@ const TournamentMatchesPage = () => {
                                                         <div className="flex items-center justify-between mb-2">
                                                             <span className="text-[10px] font-black uppercase text-gray-600 tracking-tighter">{t('tournaments.matchNum', { num: match.id.substring(0, 4) })}</span>
                                                             <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${match.status === 'completed' ? 'bg-tennis-green/10 text-tennis-green' : 'bg-white/5 text-gray-500'}`}>
-                                                                {t(`tournaments.status.${match.status}`)}
+                                                                {t(`tournaments.status.${match.status?.toLowerCase()}`)}
                                                             </div>
                                                         </div>
                                                         <div className="space-y-2">
@@ -697,6 +857,264 @@ const TournamentMatchesPage = () => {
                 </>
             )}
 
+            {/* Admin Tools Modal */}
+            {isAdminToolsOpen && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] no-print" onClick={() => setIsAdminToolsOpen(false)}></div>
+                    <div className="fixed right-0 top-0 h-full w-full max-w-md bg-gray-950 border-l border-white/10 z-[70] p-10 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right no-print">
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h2 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.title')}</h2>
+                                <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-1">{tournament?.name}</p>
+                            </div>
+                            <button onClick={() => setIsAdminToolsOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-10">
+                            {/* Quick Actions */}
+                            <section className="space-y-4">
+                                <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.quickActions')}</h3>
+                                <div className="grid grid-cols-1 gap-3">
+                                    <button
+                                        onClick={handleSimulateResults}
+                                        className="w-full p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all flex items-center gap-4 group"
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-tennis-green/10 text-tennis-green flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <Wand2 size={20} />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="text-white font-bold text-sm tracking-tight">{t('admin.tournaments.tools.simulate')}</p>
+                                            <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">{t('admin.tournaments.tools.groupResults')}</p>
+                                        </div>
+                                    </button>
+                                </div>
+                            </section>
+
+                            {/* Group Management */}
+                            <section className="space-y-4">
+                                <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.groupManagement')}</h3>
+                                <div className="space-y-3">
+                                    {groups.sort((a, b) => a.name.localeCompare(b.name)).map(group => (
+                                        <div key={group.name} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center font-black text-white text-xs border border-white/10">
+                                                        {group.name}
+                                                    </div>
+                                                    <span className="text-white font-bold text-sm">{t('tournaments.group')} {group.name}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleOpenAddPlayer(group.name, group.category)}
+                                                        disabled={group.status === 'completed'}
+                                                        className={`p-2 rounded-lg transition-all ${group.status === 'completed'
+                                                            ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-30'
+                                                            : 'bg-tennis-green/10 text-tennis-green hover:bg-tennis-green/20'}`}
+                                                        title={group.status === 'completed' ? t('tournaments.status.completed') : t('admin.tournaments.tools.addToGroup')}
+                                                    >
+                                                        <UserPlus size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleOpenRemovePlayer(group.name, group.category)}
+                                                        disabled={group.status === 'completed'}
+                                                        className={`p-2 rounded-lg transition-all ${group.status === 'completed'
+                                                            ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-30'
+                                                            : 'bg-red-500/10 text-red-500 hover:bg-red-500/20'}`}
+                                                        title={group.status === 'completed' ? t('tournaments.status.completed') : t('admin.tournaments.tools.removeFromGroup')}
+                                                    >
+                                                        <UserMinus size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* Scoring Configuration */}
+                            <section className="space-y-4">
+                                <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.scoring.title')}</h3>
+                                <div className="p-6 rounded-3xl bg-white/5 border border-white/5 space-y-6">
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.win')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-tennis-green/50 outline-none"
+                                                value={scoringConfig.win}
+                                                onChange={(e) => setScoringConfig(prev => ({ ...prev, win: parseInt(e.target.value) || 0 }))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.loss')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-red-500/50 outline-none"
+                                                value={scoringConfig.loss}
+                                                onChange={(e) => setScoringConfig(prev => ({ ...prev, loss: parseInt(e.target.value) || 0 }))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.withdraw')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-gray-500 outline-none"
+                                                value={scoringConfig.withdraw}
+                                                onChange={(e) => setScoringConfig(prev => ({ ...prev, withdraw: parseInt(e.target.value) || 0 }))}
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleUpdateScoring}
+                                        disabled={processing}
+                                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/5 flex items-center justify-center gap-2"
+                                    >
+                                        {processing ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                                        {t('admin.tournaments.tools.updateScoring')}
+                                    </button>
+                                </div>
+                            </section>
+
+                            {/* Danger Zone */}
+                            <section className="space-y-4 pt-4 border-t border-white/5">
+                                <h3 className="text-red-500/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.dangerZone')}</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => showConfirmation(
+                                            t('admin.tournaments.resetGroupStage'),
+                                            t('admin.tournaments.matches.confirmResetGroups'),
+                                            async () => {
+                                                await resetGroupStage(id!, selectedCategory === 'all' ? undefined : selectedCategory);
+                                                await loadData();
+                                                setConfirmModal(prev => ({ ...prev, open: false }));
+                                            },
+                                            'danger'
+                                        )}
+                                        className="p-4 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition-all flex flex-col items-center gap-2 text-center"
+                                    >
+                                        <Trash2 size={18} />
+                                        <span className="text-[10px] font-black uppercase tracking-tight">{t('admin.tournaments.tools.resetGroups')}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => showConfirmation(
+                                            t('admin.tournaments.resetMainDraw'),
+                                            t('admin.tournaments.matches.confirmResetKnockout'),
+                                            async () => {
+                                                await deleteBracketMatches(id!);
+                                                await loadData();
+                                                setConfirmModal(prev => ({ ...prev, open: false }));
+                                            },
+                                            'danger'
+                                        )}
+                                        className="p-4 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition-all flex flex-col items-center gap-2 text-center"
+                                    >
+                                        <Zap size={18} />
+                                        <span className="text-[10px] font-black uppercase tracking-tight">{t('admin.tournaments.tools.resetMainDraw')}</span>
+                                    </button>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Add Player Modal */}
+            {isAddPlayerModalOpen && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[80] flex items-center justify-center p-6 animate-fade-in no-print">
+                    <div className="glass max-w-lg w-full p-10 rounded-[40px] border-white/10 space-y-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.addToGroup')}</h3>
+                                <p className="text-tennis-green text-xs font-bold uppercase tracking-widest mt-1">
+                                    {t('tournaments.group')} {selectedGroupForManagement}
+                                </p>
+                            </div>
+                            <button onClick={() => setIsAddPlayerModalOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                            {availablePlayers.length === 0 ? (
+                                <p className="text-center text-gray-500 font-bold py-10">{t('admin.tournaments.noPlayers')}</p>
+                            ) : (
+                                availablePlayers.map(player => (
+                                    <button
+                                        key={player.id}
+                                        onClick={() => handleAddPlayer(player.id)}
+                                        disabled={processing}
+                                        className="w-full p-5 rounded-2xl bg-white/5 hover:bg-tennis-green hover:text-tennis-dark transition-all flex items-center justify-between group border border-white/5"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-bold text-tennis-green group-hover:bg-tennis-dark/10 group-hover:text-tennis-dark">
+                                                <Users size={20} />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="font-bold text-sm">{player.name}</p>
+                                                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{player.category || t('admin.tournaments.noCategory')}</p>
+                                            </div>
+                                        </div>
+                                        <Plus size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Remove Player Modal */}
+            {isRemovePlayerModalOpen && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[80] flex items-center justify-center p-6 animate-fade-in no-print">
+                    <div className="glass max-w-lg w-full p-10 rounded-[40px] border-white/10 space-y-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.removeFromGroup')}</h3>
+                                <p className="text-red-500 text-xs font-bold uppercase tracking-widest mt-1">
+                                    {t('tournaments.group')} {selectedGroupForManagement}
+                                </p>
+                            </div>
+                            <button onClick={() => setIsRemovePlayerModalOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                            {groupPlayers.length === 0 ? (
+                                <p className="text-center text-gray-500 font-bold py-10">{t('admin.tournaments.noPlayers')}</p>
+                            ) : (
+                                groupPlayers.map(player => (
+                                    <button
+                                        key={player.id}
+                                        onClick={() => showConfirmation(
+                                            t('admin.tournaments.matches.removePlayerTitle'),
+                                            t('admin.tournaments.matches.removePlayerConfirm'),
+                                            () => handleRemovePlayer(player.id),
+                                            'danger'
+                                        )}
+                                        disabled={processing}
+                                        className="w-full p-5 rounded-2xl bg-white/5 hover:bg-red-500 hover:text-white transition-all flex items-center justify-between group border border-white/5"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-bold text-red-500 group-hover:bg-red-700/20 group-hover:text-white">
+                                                <Users size={20} />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="font-bold text-sm">{player.name}</p>
+                                                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{player.category || t('admin.tournaments.noCategory')}</p>
+                                            </div>
+                                        </div>
+                                        <Trash2 size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Print Styles */}
             <style>{`
                 @media print {
@@ -717,7 +1135,7 @@ const TournamentMatchesPage = () => {
 
             {/* Generic Confirmation Modal */}
             {confirmModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in no-print">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fade-in no-print">
                     <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
                         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
                             <AlertTriangle size={32} />
@@ -747,7 +1165,7 @@ const TournamentMatchesPage = () => {
 
             {/* Error Modal */}
             {errorModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-6 animate-fade-in no-print">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in no-print">
                     <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
                         <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
                             <AlertTriangle size={32} />
@@ -766,7 +1184,7 @@ const TournamentMatchesPage = () => {
 
             {/* Input Modal */}
             {inputModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in no-print">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-6 animate-fade-in no-print">
                     <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
                         <div className="space-y-2">
                             <h3 className="text-white text-2xl font-bold">{inputModal.title}</h3>

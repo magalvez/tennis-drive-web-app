@@ -25,6 +25,8 @@
         "exportPDF": "Export PDF",
         "finalized": "Finalized",
         "inProgress": "In Progress",
+        "scheduled": "Scheduled",
+        "pending": "Pending",
         "admin": "Administrator",
         "confirmResult": "Confirm Result",
         "none": "None",
@@ -168,7 +170,8 @@
             "upcoming": "Upcoming",
             "active": "Active",
             "completed": "Completed",
-            "pending": "Pending"
+            "pending": "Pending",
+            "scheduled": "Scheduled"
         },
         "free": "Free",
         "prize": "Prize",
@@ -181,7 +184,8 @@
             "groups": "Groups",
             "standings": "Standings",
             "knockout": "Brackets"
-        }
+        },
+        "group": "Group"
     },
     "ranking": {
         "title": "Top Players",
@@ -656,7 +660,6 @@
             },
             "matches": {
                 "title": "Matches",
-                "scheduled": "Scheduled",
                 "drawExists": "Draw Exists",
                 "drawExistsDesc": "Matches have already been generated.",
                 "cannotGenerate": "Cannot Generate",
@@ -690,6 +693,8 @@
                 },
                 "finalized": "Finalized",
                 "inProgress": "In Progress",
+                "scheduled": "Scheduled",
+                "pending": "Pending",
                 "noKnockout": "No Main Draw matches yet.",
                 "knockoutReady": "Group stage in progress. Generate Main Draw when ready.",
                 "finalizeGroup": "Finalize Group %{name}",
@@ -705,7 +710,8 @@
                 "removePlayerTitle": "Remove Player",
                 "removePlayerConfirm": "This will remove the player and delete all their matches in this group. Continue?",
                 "addPlayerError": "Failed to add player",
-                "removePlayerError": "Failed to remove player",
+                "removePlayerError": "Error removing player.",
+                "errorGroupFinalized": "Group is finalized. Undo finalization to manage players.",
                 "errorGroups": "Error generating groups",
                 "errorFinalizing": "Error finalizing group",
                 "errorSavingScore": "Error saving score",

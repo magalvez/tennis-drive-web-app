@@ -102,7 +102,6 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
                     p1 = seedToPlayer[s1];
                     p2 = seedToPlayer[s2];
 
-                    status = (p1 && p2) ? 'scheduled' : 'completed';
                     if (!p1 || !p2) {
                         isBye = true;
                         winnerId = p1 ? p1.uid : (p2 ? p2.uid : undefined);

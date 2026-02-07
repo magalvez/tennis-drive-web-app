@@ -4,7 +4,7 @@ import { formatMatchScore } from '../utils/scoring';
 import { logActivity } from './activityService';
 import { createGroup } from './groupService';
 import { advanceWinner } from './bracketService';
-import type { Match, TournamentCategory, TournamentData, TournamentPlayer } from './types';
+import type { Match, SetScore, TournamentCategory, TournamentData, TournamentPlayer } from './types';
 
 export const CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'rookie'];
 
@@ -110,13 +110,17 @@ export const getTournamentMatches = async (tournamentId: string) => {
  * Seeded Snake Draft - Ensures top-ranked players are distributed across different groups
  * based on their club points or manual seeds.
  */
-export const assignGroupsToPlayers = async (tournamentId: string, numberOfGroups: number, category?: TournamentCategory) => {
+export const assignGroupsToPlayers = async (tournamentId: string, numberOfGroups: number, category?: TournamentCategory, playersList?: TournamentPlayer[]) => {
     try {
         const tournament = await getTournamentById(tournamentId);
         if (!tournament) throw new Error("Tournament not found");
 
-        let players = await getTournamentPlayers(tournamentId);
-        if (category) players = players.filter(p => p.category === category);
+        let players = playersList || await getTournamentPlayers(tournamentId);
+        // Sync Logic: Filter out rejected players AND filter by category
+        players = players.filter(p =>
+            p.registrationStatus !== 'rejected' &&
+            (!category || p.category === category)
+        );
         if (players.length === 0) throw new Error("No players found");
 
         // Validation: All players must be checked in and (paid or wildcard)
@@ -241,7 +245,11 @@ export const autoSeedPlayers = async (tournamentId: string, category?: Tournamen
 export const generateGroupStageMatches = async (tournamentId: string, category?: TournamentCategory) => {
     try {
         let players = await getTournamentPlayers(tournamentId);
-        if (category) players = players.filter(p => p.category === category);
+        // Sync Logic: Filter out rejected players AND filter by category
+        players = players.filter(p =>
+            p.registrationStatus !== 'rejected' &&
+            (!category || p.category === category)
+        );
 
         const playersByGroup: { [key: string]: TournamentPlayer[] } = {};
         players.forEach(p => {
@@ -359,21 +367,106 @@ export const resetGroupStage = async (tournamentId: string, category?: Tournamen
 
 export const simulateGroupMatchResults = async (tournamentId: string, category?: TournamentCategory) => {
     try {
+        const tournament = await getTournamentById(tournamentId);
+        const scoring = tournament?.scoringConfig || { win: 3, loss: 0, withdraw: 0 };
+        const clubId = tournament?.clubId;
+
         const matches = await getTournamentMatches(tournamentId);
+        // Filter: Scheduled AND Group Stage (has group)
         let scheduledGroupMatches = matches.filter(m => m.status === 'scheduled' && !!m.group);
-        if (category) scheduledGroupMatches = scheduledGroupMatches.filter(m => m.category === category);
+
+        if (category) {
+            scheduledGroupMatches = scheduledGroupMatches.filter(m => m.category?.toLowerCase() === category.toLowerCase());
+        }
+
+        if (scheduledGroupMatches.length === 0) return 0;
+
+        const batch = writeBatch(db);
 
         for (const match of scheduledGroupMatches) {
+            const matchRef = doc(db, "tournaments", tournamentId, "matches", match.id);
+
+            // 1. Determine Winner
             const winnerId = Math.random() > 0.5 ? match.player1Uid : match.player2Uid;
-            const sets: any[] = [
-                { player1: Math.random() > 0.5 ? 6 : 4, player2: Math.random() > 0.5 ? 4 : 6 },
-                { player1: Math.random() > 0.5 ? 6 : 3, player2: Math.random() > 0.5 ? 3 : 6 }
-            ];
-            await saveMatchScoreByAdmin(tournamentId, match.id, { sets, winnerId });
+            const loserId = winnerId === match.player1Uid ? match.player2Uid : match.player1Uid;
+            const isP1Winner = winnerId === match.player1Uid;
+
+            // 2. Generate Simulated Sets (Best of 3)
+            const sets: SetScore[] = [];
+            const numSets = Math.random() > 0.7 ? 3 : 2;
+
+            const generateRandomSet = (p1Wins: boolean): SetScore => {
+                const outcomes = [
+                    { w: 6, l: 0 }, { w: 6, l: 1 }, { w: 6, l: 2 },
+                    { w: 6, l: 3 }, { w: 6, l: 4 }, { w: 7, l: 5 }, { w: 7, l: 6 }
+                ];
+                const outcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+                const set: SetScore = {
+                    player1: p1Wins ? outcome.w : outcome.l,
+                    player2: p1Wins ? outcome.l : outcome.w
+                };
+                if (outcome.w === 7 && outcome.l === 6) {
+                    set.tiebreak = {
+                        player1: p1Wins ? 7 : Math.floor(Math.random() * 6),
+                        player2: p1Wins ? Math.floor(Math.random() * 6) : 7
+                    };
+                }
+                return set;
+            };
+
+            if (numSets === 2) {
+                sets.push(generateRandomSet(isP1Winner));
+                sets.push(generateRandomSet(isP1Winner));
+            } else {
+                const p1WinnerFirst = Math.random() > 0.5;
+                sets.push(generateRandomSet(p1WinnerFirst));
+                sets.push(generateRandomSet(!p1WinnerFirst));
+                sets.push(generateRandomSet(isP1Winner));
+            }
+
+            const scoreString = formatMatchScore(sets);
+
+            // 3. Update Match Document
+            batch.update(matchRef, {
+                status: 'completed',
+                winnerId: winnerId,
+                sets: sets,
+                score: scoreString,
+                proposedScore: null,
+                proposedWinnerId: null,
+                submittedBy: null
+            });
+
+            // 4. Update Player XP & Club Points (using individual updates to handle manual players safely)
+            // Note: Batch updates would fail if a user document doesn't exist
+            if (winnerId && !winnerId.startsWith('manual_')) {
+                try {
+                    await updateDoc(doc(db, "users", winnerId), {
+                        "tennisProfile.points": increment(50),
+                        ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.win ?? 3) })
+                    });
+                } catch (e) {
+                    console.log(`Skipping points for winner ${winnerId}`);
+                }
+            }
+
+            if (loserId && !loserId.startsWith('manual_')) {
+                try {
+                    await updateDoc(doc(db, "users", loserId), {
+                        "tennisProfile.points": increment(-15),
+                        ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.loss ?? 0) })
+                    });
+                } catch (e) {
+                    console.log(`Skipping points for loser ${loserId}`);
+                }
+            }
         }
+
+        await batch.commit();
         return scheduledGroupMatches.length;
+
     } catch (error) {
-        console.error(error);
+        console.error("Error simulating results:", error);
         throw error;
     }
 };
