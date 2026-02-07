@@ -27,7 +27,8 @@
         "inProgress": "En Curso",
         "admin": "Administrador",
         "confirmResult": "Confirmar Resultado",
-        "none": "Ninguna"
+        "none": "Ninguna",
+        "player": "Jugador"
     },
     "adminTabs": {
         "dashboard": "Dashboard",
@@ -80,7 +81,6 @@
     },
     "profile": {
         "title": "Perfil",
-        "edit": "Editar Perfil",
         "stats": "Estadísticas",
         "history": "Historial de Partidos",
         "matches": "Partidos",
@@ -95,7 +95,44 @@
         "logout": "Cerrar Sesión",
         "settings": "Ajustes",
         "language": "Idioma",
-        "saveChanges": "Guardar Cambios"
+        "saveChanges": "Guardar Cambios",
+        "tennisProfile": "Perfil de Tenis",
+        "winRate": "% Victorias",
+        "ntrpLevel": "Nivel NTRP",
+        "playStyle": "Estilo de Juego",
+        "dominantHand": "Mano Dominante",
+        "category": "Categoría",
+        "bio": "Biografía",
+        "notSet": "No establecido",
+        "wonShort": "Ganados",
+        "lostShort": "Perdidos",
+        "edit": {
+            "title": "Editar Perfil",
+            "levels": {
+                "beginner": "Principiante (1.0 - 2.5)",
+                "intermediate": "Intermedio (3.0 - 4.0)",
+                "advanced": "Avanzado (4.5+)"
+            },
+            "categories": {
+                "open": "Abierta",
+                "first": "Primera",
+                "second": "Segunda",
+                "third": "Tercera",
+                "fourth": "Cuarta",
+                "fifth": "Quinta",
+                "rookie": "Principiante"
+            },
+            "hands": {
+                "right": "Diestro",
+                "left": "Zurdo"
+            },
+            "styles": {
+                "aggressive": "Fondo Agresivo",
+                "counter": "Contraatacante",
+                "serve": "Saque y Volea",
+                "allCourt": "Toda la Cancha"
+            }
+        }
     },
     "tournaments": {
         "title": "Torneos",
@@ -137,12 +174,13 @@
         "prize": "Premio",
         "location": "Ubicación",
         "date": "Fecha",
+        "noMatchesFound": "No se encontraron partidos aún",
         "matchNum": "Partido #%{num}",
         "setNum": "Set %{num}",
         "tabs": {
             "groups": "Grupos",
             "standings": "Posiciones",
-            "knockout": "Cuadro"
+            "knockout": "Cuadros"
         },
         "chat": {
             "title": "Lobby",
@@ -401,7 +439,7 @@
             "emailOptional": "Correo (Opcional)",
             "phEmail": "jugador@ejemplo.com",
             "emailEmailHint": "Se vinculará si existe el usuario.",
-            "wildcardEntry": "Entrada Wildcard",
+            "wildcardEntry": "Wildcard Entry",
             "goldenTicket": "Inscripción especial",
             "enrollPlayer": "Inscribir Jugador",
             "entryFeeLabel": "Inscripción",
@@ -556,6 +594,7 @@
             "resultsDesc": "Ver resultados finales",
             "empty": "Sin torneos.",
             "emptyDesc": "Crea uno para empezar.",
+            "recentPerformance": "Rendimiento Reciente",
             "notFound": "Torneo no encontrado.",
             "missingFields": "Campos faltantes",
             "fillAll": "Completa todo.",
@@ -602,17 +641,17 @@
                 },
                 "profile": {
                     "title": "Perfil del Jugador",
-                    "registeredVia": "Registrado vía torneo",
+                    "registeredVia": "Registered via tournament",
                     "adjustPoints": "Ajustar Puntos",
-                    "pointsHelp": "* Usa valores negativos para restar.",
-                    "suspend": "Suspender Jugador",
+                    "pointsHelp": "* Use negative values to subtract points.",
+                    "suspend": "Suspend Player",
                     "restrictionMode": "Modo Restricción",
-                    "adminNotes": "Notas Admin",
-                    "phNotes": "Notas privadas...",
-                    "updateButton": "Actualizar Perfil",
-                    "notesPlaceholder": "Notas internas...",
-                    "saveActions": "Guardar Acciones",
-                    "suspendedLabel": "(Suspendido)",
+                    "adminNotes": "Admin Notes",
+                    "phNotes": "Add private notes about this player...",
+                    "updateButton": "Update Profile",
+                    "notesPlaceholder": "Write internal notes about this player...",
+                    "saveActions": "Save Actions",
+                    "suspendedLabel": "(Suspended)",
                     "manualEntry": "Manual",
                     "updateSuccess": "Perfil actualizado.",
                     "updateError": "Error al actualizar.",
@@ -721,5 +760,10 @@
         "winner": "Ganador",
         "pending": "TBD",
         "matchNumber": "Partido"
+    },
+    "matches": {
+        "friendlyChallenge": "Desafío Amistoso",
+        "won": "GANADO",
+        "lost": "PERDIDO"
     }
 }

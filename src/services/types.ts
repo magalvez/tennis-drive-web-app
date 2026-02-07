@@ -82,6 +82,7 @@ export interface Match {
     isWithdrawal?: boolean;
     nextMatchId?: string;
     nextMatchSlot?: 1 | 2;
+    tournamentName?: string;
 }
 
 export interface GroupStanding {

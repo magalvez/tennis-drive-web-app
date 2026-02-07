@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, increment, orderBy, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, increment, orderBy, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { formatMatchScore } from '../utils/scoring';
 import { logActivity } from './activityService';
@@ -471,8 +471,55 @@ export const checkInPlayer = async (tournamentId: string, playerId: string, play
         }
 
         await batch.commit();
+        return true;
     } catch (error) {
         console.error("Error checking in player:", error);
         throw error;
+    }
+};
+
+export const getPlayerMatches = async (uid: string) => {
+    try {
+        const { or } = await import('firebase/firestore');
+        const matchesRef = collectionGroup(db, 'matches');
+        const q = query(matchesRef, or(where('player1Uid', '==', uid), where('player2Uid', '==', uid)));
+
+        const querySnapshot = await getDocs(q);
+        const matches: Match[] = [];
+        const tournamentIds = new Set<string>();
+
+        querySnapshot.forEach((docSnap) => {
+            const match = { id: docSnap.id, ...(docSnap.data() as any) } as Match;
+            matches.push(match);
+            if (match.tournamentId) {
+                tournamentIds.add(match.tournamentId);
+            }
+        });
+
+        if (tournamentIds.size > 0) {
+            const tournamentNames: { [id: string]: string } = {};
+            const tournamentPromises = Array.from(tournamentIds).map(async (tid) => {
+                try {
+                    const tournamentDoc = await getDoc(doc(db, 'tournaments', tid));
+                    if (tournamentDoc.exists()) {
+                        tournamentNames[tid] = tournamentDoc.data()?.name || 'Tournament';
+                    }
+                } catch (e) {
+                    console.warn(`Failed to fetch tournament ${tid}:`, e);
+                }
+            });
+            await Promise.all(tournamentPromises);
+
+            matches.forEach(m => {
+                if (m.tournamentId && tournamentNames[m.tournamentId]) {
+                    m.tournamentName = tournamentNames[m.tournamentId];
+                }
+            });
+        }
+
+        return matches;
+    } catch (error) {
+        console.error("Error fetching player matches:", error);
+        return [];
     }
 };

@@ -35,6 +35,7 @@ import {
     updatePlayerSeed
 } from '../../../services/tournamentService';
 import type { TournamentCategory, TournamentData, TournamentPlayer } from '../../../services/types';
+import PlayerStatsModal from '../../../components/admin/PlayerStatsModal';
 
 const TournamentPlayersPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -65,6 +66,7 @@ const TournamentPlayersPage = () => {
     const [randomCategory, setRandomCategory] = useState<TournamentCategory | null>(null);
     const [showSeedModal, setShowSeedModal] = useState(false);
     const [seedValue, setSeedValue] = useState('');
+    const [showStatsModal, setShowStatsModal] = useState(false);
 
     // Generic Modal States
     const [confirmModal, setConfirmModal] = useState<{
@@ -544,7 +546,10 @@ const TournamentPlayersPage = () => {
                     ) : (
                         filteredPlayers.map(player => (
                             <div key={player.id} className="glass p-6 rounded-[32px] border-white/5 hover:border-white/10 transition-all flex flex-col md:flex-row items-center justify-between gap-6 group">
-                                <div className="flex items-center gap-6 w-full md:w-auto">
+                                <div
+                                    onClick={() => { setSelectedPlayer(player); setShowStatsModal(true); }}
+                                    className="flex items-center gap-6 w-full md:w-auto cursor-pointer group"
+                                >
                                     <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-white shrink-0 font-black text-2xl group-hover:bg-tennis-green group-hover:text-tennis-dark transition-all duration-500">
                                         {player.name.charAt(0)}
                                     </div>
@@ -956,6 +961,14 @@ const TournamentPlayersPage = () => {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Player Stats Modal */}
+            {showStatsModal && selectedPlayer && (
+                <PlayerStatsModal
+                    player={selectedPlayer}
+                    onClose={() => setShowStatsModal(false)}
+                />
             )}
         </div>
     );

@@ -1,4 +1,4 @@
-import { collection, collectionGroup, doc, documentId, getDocs, increment, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, collectionGroup, doc, documentId, getDoc, getDocs, increment, query, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from "../config/firebase";
 import { getClubById } from './clubService';
 import type { Match } from './types';
@@ -262,5 +262,18 @@ export const removeAdminRole = async (uid: string): Promise<void> => {
     } catch (error) {
         console.error("Error removing admin role:", error);
         throw error;
+    }
+};
+export const getUserProfile = async (uid: string): Promise<UserData | null> => {
+    try {
+        const userRef = doc(db, "users", uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            return { uid: userSnap.id, ...userSnap.data() } as UserData;
+        }
+        return null;
+    } catch (error) {
+        console.error("Error getting user profile:", error);
+        return null;
     }
 };

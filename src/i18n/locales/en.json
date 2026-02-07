@@ -27,7 +27,8 @@
         "inProgress": "In Progress",
         "admin": "Administrator",
         "confirmResult": "Confirm Result",
-        "none": "None"
+        "none": "None",
+        "player": "Player"
     },
     "adminTabs": {
         "dashboard": "Dashboard",
@@ -80,7 +81,6 @@
     },
     "profile": {
         "title": "Profile",
-        "edit": "Edit Profile",
         "stats": "Statistics",
         "history": "Match History",
         "matches": "Matches",
@@ -95,7 +95,44 @@
         "logout": "Logout Session",
         "settings": "Settings",
         "language": "Language",
-        "saveChanges": "Save Changes"
+        "saveChanges": "Save Changes",
+        "tennisProfile": "Tennis Profile",
+        "winRate": "Win Rate",
+        "ntrpLevel": "NTRP Level",
+        "playStyle": "Play Style",
+        "dominantHand": "Dominant Hand",
+        "category": "Category",
+        "bio": "Bio",
+        "notSet": "Not set",
+        "wonShort": "Won",
+        "lostShort": "Lost",
+        "edit": {
+            "title": "Edit Profile",
+            "levels": {
+                "beginner": "Beginner (1.0 - 2.5)",
+                "intermediate": "Intermediate (3.0 - 4.0)",
+                "advanced": "Advanced (4.5+)"
+            },
+            "categories": {
+                "open": "Open",
+                "first": "First",
+                "second": "Second",
+                "third": "Third",
+                "fourth": "Fourth",
+                "fifth": "Fifth",
+                "rookie": "Rookie"
+            },
+            "hands": {
+                "right": "Right-Handed",
+                "left": "Left-Handed"
+            },
+            "styles": {
+                "aggressive": "Aggressive Basere",
+                "counter": "Counter Puncher",
+                "serve": "Serve & Volley",
+                "allCourt": "All-Court Player"
+            }
+        }
     },
     "tournaments": {
         "title": "Tournaments",
@@ -137,6 +174,7 @@
         "prize": "Prize",
         "location": "Location",
         "date": "Date",
+        "noMatchesFound": "No matches found yet",
         "matchNum": "Match #%{num}",
         "setNum": "Set %{num}",
         "tabs": {
@@ -549,6 +587,7 @@
             "resultsDesc": "View final tournament outcome",
             "empty": "No tournaments yet.",
             "emptyDesc": "Create one to get started.",
+            "recentPerformance": "Recent Performance",
             "notFound": "Tournament not found.",
             "missingFields": "Missing Fields",
             "fillAll": "Please fill out all fields.",
@@ -714,5 +753,10 @@
         "winner": "Winner",
         "pending": "TBD",
         "matchNumber": "Match"
+    },
+    "matches": {
+        "friendlyChallenge": "Friendly Challenge",
+        "won": "WON",
+        "lost": "LOST"
     }
 }
