@@ -145,10 +145,10 @@ const AdminLayout = () => {
                             </button>
                         </div>
 
-                        <button className="p-2 text-gray-400 hover:text-white relative">
+                        <Link to="/admin/notifications" className="p-2 text-gray-400 hover:text-white relative">
                             <Bell size={20} />
                             <span className="absolute top-2 right-2 w-2 h-2 bg-tennis-green rounded-full border border-tennis-dark"></span>
-                        </button>
+                        </Link>
                         <div className="h-8 w-[1px] bg-white/10 mx-2"></div>
                         <div className="flex items-center gap-3">
                             <div className="text-right hidden sm:block">

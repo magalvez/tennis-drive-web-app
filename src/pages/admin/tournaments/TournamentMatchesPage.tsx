@@ -63,7 +63,8 @@ const TournamentMatchesPage = () => {
     const [processing, setProcessing] = useState(false);
 
     const [activeTab, setActiveTab] = useState<'groups' | 'knockout' | 'standings'>('groups');
-    const [selectedCategory, setSelectedCategory] = useState<TournamentCategory | 'all'>('all');
+    const [selectedCategory, setSelectedCategory] = useState<TournamentCategory | ''>('');
+    const [selectedModality, setSelectedModality] = useState<'singles' | 'doubles'>('singles');
 
     // Score Entry State
     const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -81,7 +82,7 @@ const TournamentMatchesPage = () => {
         title: string;
         message: string;
         onConfirm: () => Promise<void>;
-        type: 'danger' | 'warning' | 'info';
+        type: 'danger' | 'warning' | 'info' | 'success';
     }>({ open: false, title: '', message: '', onConfirm: async () => { }, type: 'danger' });
 
     const [errorModal, setErrorModal] = useState<{
@@ -112,7 +113,7 @@ const TournamentMatchesPage = () => {
         setErrorModal({ open: true, message: msg });
     };
 
-    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' = 'danger') => {
+    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' | 'success' = 'danger') => {
         setConfirmModal({
             open: true,
             title,
@@ -137,12 +138,12 @@ const TournamentMatchesPage = () => {
         if (!id) return;
         setLoading(true);
         try {
-            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
+            const cat = selectedCategory === '' ? undefined : selectedCategory;
             const [tData, mData, gData, sData] = await Promise.all([
                 getTournamentById(id),
                 getTournamentMatches(id),
                 getGroups(id),
-                getTournamentStandings(id, cat)
+                getTournamentStandings(id, cat, selectedModality)
             ]);
             setTournament(tData);
             setMatches(mData);
@@ -153,8 +154,13 @@ const TournamentMatchesPage = () => {
                 setScoringConfig(tData.scoringConfig);
             }
 
-            if (tData?.categories?.length && selectedCategory === 'all') {
-                setSelectedCategory(tData.categories[0]);
+            // Auto-select modality if only one is available
+            if (tData?.modalityConfig) {
+                if (tData.modalityConfig.singles && !tData.modalityConfig.doubles) {
+                    setSelectedModality('singles');
+                } else if (!tData.modalityConfig.singles && tData.modalityConfig.doubles) {
+                    setSelectedModality('doubles');
+                }
             }
         } catch (error) {
             console.error(error);
@@ -172,20 +178,33 @@ const TournamentMatchesPage = () => {
 
         setProcessing(true);
         try {
-            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
-            const players = await getTournamentPlayers(id);
-            const filteredPlayers = cat ? players.filter(p => p.category === cat) : players;
+            const cat = selectedCategory === '' ? undefined : selectedCategory;
+            const isDoubles = selectedModality === 'doubles';
 
-            // Validation: All players must be checked in and (paid or wildcard)
-            const unreadyPlayers = filteredPlayers.filter(p => !p.isCheckedIn || (p.paymentStatus !== 'paid' && !p.isWildcard));
+            let items: any[] = [];
+            if (isDoubles) {
+                const { getDoublesTeams } = await import('../../../services/doublesTeamService');
+                items = await getDoublesTeams(id);
+            } else {
+                items = await getTournamentPlayers(id);
+            }
 
-            if (unreadyPlayers.length > 0) {
-                const names = unreadyPlayers.map(p => p.name).join(", ");
+            const filteredItems = cat ? items.filter(p => p.category === cat) : items;
+
+            // Validation: All items must be checked in and (paid or wildcard)
+            // For doubles, we check if the team is checked in (using player1CheckedIn as proxy)
+            const unreadyItems = filteredItems.filter(p => {
+                const checkedIn = isDoubles ? p.player1CheckedIn : p.isCheckedIn;
+                return !checkedIn || (p.paymentStatus !== 'paid' && !p.isWildcard);
+            });
+
+            if (unreadyItems.length > 0) {
+                const names = unreadyItems.map(p => isDoubles ? (p.teamName || `${p.player1Name} / ${p.player2Name}`) : p.name).join(", ");
                 showError(`${t('admin.tournaments.matches.playersNotReady')}: ${names}`);
                 return;
             }
 
-            if (filteredPlayers.length < 2) {
+            if (filteredItems.length < 2) {
                 showError(t('admin.tournaments.matches.notEnoughPlayers'));
                 return;
             }
@@ -198,12 +217,12 @@ const TournamentMatchesPage = () => {
                     if (!val) return;
                     setProcessing(true);
                     try {
-                        // Filter players to include only approved registrations before assigning groups
-                        const approvedPlayers = players.filter(p => p.registrationStatus === 'approved');
-                        await assignGroupsToPlayers(id, parseInt(val), cat, approvedPlayers);
-                        await generateGroupStageMatches(id, cat);
+                        const approvedItems = items.filter(p => isDoubles || p.registrationStatus === 'approved');
+                        await assignGroupsToPlayers(id, parseInt(val), cat, approvedItems, selectedModality);
+                        await generateGroupStageMatches(id, cat, selectedModality);
                         await loadData();
                         setInputModal(prev => ({ ...prev, open: false }));
+                        showConfirmation(t('common.success'), t('admin.tournaments.matches.successGroups'), async () => { }, 'success');
                     } catch (error: any) {
                         if (error.message?.startsWith('PLAYERS_NOT_READY:')) {
                             showError(error.message.replace('PLAYERS_NOT_READY: ', ''));
@@ -227,8 +246,8 @@ const TournamentMatchesPage = () => {
         if (!id || processing) return;
         setProcessing(true);
         try {
-            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
-            const qualifiers = await getQualifiedPlayers(id, cat);
+            const cat = selectedCategory === '' ? undefined : selectedCategory;
+            const qualifiers = await getQualifiedPlayers(id, cat, selectedModality);
             const allGroupsFinalized = await areAllGroupsFinalized(id, cat);
 
             if (!allGroupsFinalized) {
@@ -250,9 +269,18 @@ const TournamentMatchesPage = () => {
                 p.registrationStatus !== 'rejected'
             );
 
-            await generateMainDraw(id, qualifiedPlayers, cat);
+            // Fetch doubles teams if needed
+            let items: any[] = qualifiedPlayers;
+            if (selectedModality === 'doubles') {
+                const { getDoublesTeams } = await import('../../../services/doublesTeamService');
+                const allTeams = await getDoublesTeams(id);
+                items = allTeams.filter(t => qualifiedPlayerIds.includes(t.id));
+            }
+
+            await generateMainDraw(id, items, cat, selectedModality);
             await loadData();
             setActiveTab('knockout');
+            showConfirmation(t('common.success'), t('bracket.generateSuccess'), async () => { }, 'success');
         } catch (error) {
             showError(t('bracket.generateError'));
         } finally {
@@ -270,9 +298,10 @@ const TournamentMatchesPage = () => {
             async (val) => {
                 if (!val) return;
                 try {
-                    await finalizeGroup(id, groupName, parseInt(val), selectedCategory === 'all' ? undefined : selectedCategory);
+                    await finalizeGroup(id, groupName, parseInt(val), selectedCategory === '' ? undefined : selectedCategory, selectedModality === 'doubles');
                     await loadData();
                     setInputModal(prev => ({ ...prev, open: false }));
+                    showConfirmation(t('common.success'), t('admin.tournaments.matches.successFinalizing'), async () => { }, 'success');
                 } catch (error) {
                     showError(t('admin.tournaments.matches.errorFinalizing'));
                 }
@@ -284,7 +313,7 @@ const TournamentMatchesPage = () => {
         setSelectedMatch(match);
         if (match.sets) {
             setScoreSets(match.sets);
-            setWinnerId(match.winnerId || null);
+            setWinnerId(match.winnerId || match.winnerTeamId || null);
         } else {
             setScoreSets([{ player1: 0, player2: 0 }, { player1: 0, player2: 0 }, { player1: 0, player2: 0 }]);
             setWinnerId(null);
@@ -303,6 +332,7 @@ const TournamentMatchesPage = () => {
             });
             setSelectedMatch(null);
             await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.matches.successScore'), async () => { }, 'success');
         } catch (error) {
             showError(t('admin.tournaments.matches.errorSavingScore'));
         } finally {
@@ -316,7 +346,9 @@ const TournamentMatchesPage = () => {
         setScoreSets(newSets);
 
         // Auto-calculate winner
-        const win = calculateWinner(newSets, selectedMatch?.player1Uid || '', selectedMatch?.player2Uid || '');
+        const p1Id = selectedMatch?.isDoubles ? selectedMatch.team1Id : selectedMatch?.player1Uid;
+        const p2Id = selectedMatch?.isDoubles ? selectedMatch.team2Id : selectedMatch?.player2Uid;
+        const win = calculateWinner(newSets, p1Id || '', p2Id || '');
         if (win) setWinnerId(win);
     };
 
@@ -325,8 +357,8 @@ const TournamentMatchesPage = () => {
         if (!id || processing) return;
         setProcessing(true);
         try {
-            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
-            await simulateGroupMatchResults(id, cat);
+            const cat = selectedCategory === '' ? undefined : selectedCategory;
+            await simulateGroupMatchResults(id, cat, selectedModality);
             await loadData();
             setIsAdminToolsOpen(false);
         } catch (error) {
@@ -344,6 +376,7 @@ const TournamentMatchesPage = () => {
             await updateTournament(id, { scoringConfig });
             await loadData();
             setIsAdminToolsOpen(false);
+            showConfirmation(t('common.success'), t('admin.tournaments.updateSuccess'), async () => { }, 'success');
         } catch (error) {
             console.error(error);
             showError(t('admin.tournaments.updateError'));
@@ -361,7 +394,7 @@ const TournamentMatchesPage = () => {
         }
 
         try {
-            const players = await getPlayersWithoutGroup(id, category);
+            const players = await getPlayersWithoutGroup(id, category, selectedModality === 'doubles');
             setAvailablePlayers(players);
             setSelectedGroupForManagement(groupName);
             setSelectedCategoryForManagement(category);
@@ -376,9 +409,10 @@ const TournamentMatchesPage = () => {
         if (!id || !selectedGroupForManagement) return;
         setProcessing(true);
         try {
-            await addPlayerToGroup(id, selectedGroupForManagement, playerId, selectedCategoryForManagement);
+            await addPlayerToGroup(id, selectedGroupForManagement, playerId, selectedCategoryForManagement, selectedModality === 'doubles');
             await loadData();
             setIsAddPlayerModalOpen(false);
+            showConfirmation(t('common.success'), t('admin.tournaments.matches.successAddPlayer'), async () => { }, 'success');
         } catch (error) {
             console.error(error);
             showError(t('admin.tournaments.matches.addPlayerError'));
@@ -396,7 +430,7 @@ const TournamentMatchesPage = () => {
         }
 
         try {
-            const players = await getGroupPlayers(id, groupName, category);
+            const players = await getGroupPlayers(id, groupName, category, selectedModality === 'doubles');
             setGroupPlayers(players);
             setSelectedGroupForManagement(groupName);
             setSelectedCategoryForManagement(category);
@@ -411,10 +445,11 @@ const TournamentMatchesPage = () => {
         if (!id || !selectedGroupForManagement) return;
         setProcessing(true);
         try {
-            await removePlayerFromGroup(id, selectedGroupForManagement, playerId, selectedCategoryForManagement);
+            await removePlayerFromGroup(id, selectedGroupForManagement, playerId, selectedCategoryForManagement, selectedModality === 'doubles');
             await loadData();
             setIsRemovePlayerModalOpen(false);
             setConfirmModal(prev => ({ ...prev, open: false }));
+            showConfirmation(t('common.success'), t('admin.tournaments.matches.successRemovePlayer'), async () => { }, 'success');
         } catch (error) {
             console.error(error);
             showError(t('admin.tournaments.matches.removePlayerError'));
@@ -424,11 +459,15 @@ const TournamentMatchesPage = () => {
     };
 
     const groupMatches = matches.filter(m =>
-        !!m.group && (selectedCategory === 'all' || m.category === selectedCategory)
+        !!m.group &&
+        (selectedCategory === '' || m.category === selectedCategory) &&
+        (selectedModality === 'doubles' ? m.isDoubles : !m.isDoubles)
     );
 
     const bracketMatches = matches.filter(m =>
-        !!m.bracketRound && (selectedCategory === 'all' || m.category === selectedCategory)
+        !!m.bracketRound &&
+        (selectedCategory === '' || m.category === selectedCategory) &&
+        (selectedModality === 'doubles' ? m.isDoubles : !m.isDoubles)
     );
 
     const matchesByGroupName: { [key: string]: Match[] } = {};
@@ -503,26 +542,52 @@ const TournamentMatchesPage = () => {
                 </div>
             </div>
 
-            {/* Category Filter */}
-            {tournament?.categories && tournament.categories.length > 0 && (
-                <div className="flex items-center gap-4 overflow-x-auto pb-2 no-scrollbar no-print">
-                    {[...(tournament.categories || [])].sort((a, b) => {
-                        const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
-                        return order.indexOf(a.toUpperCase()) - order.indexOf(b.toUpperCase());
-                    }).map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border transition-all whitespace-nowrap ${selectedCategory === cat
-                                ? 'bg-white text-tennis-dark border-white'
-                                : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'
-                                }`}
-                        >
-                            {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
-                        </button>
-                    ))}
+            {/* Filters */}
+            <div className="flex flex-col gap-6 no-print">
+                <div className="flex flex-wrap items-center justify-between gap-6">
+                    {/* Category Filter */}
+                    {tournament?.categories && tournament.categories.length > 0 && (
+                        <div className="flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar">
+                            {[...(tournament.categories || [])].sort((a, b) => {
+                                const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
+                                return order.indexOf(a.toUpperCase()) - order.indexOf(b.toUpperCase());
+                            }).sort(() => {
+                                // Keep the first category active if none selected
+                                return 0;
+                            }).map((cat) => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border transition-all whitespace-nowrap ${selectedCategory === cat
+                                        ? 'bg-white text-tennis-dark border-white'
+                                        : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'
+                                        }`}
+                                >
+                                    {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Modality Toggle */}
+                    {tournament?.modalityConfig?.singles && tournament?.modalityConfig?.doubles && (
+                        <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
+                            <button
+                                onClick={() => setSelectedModality('singles')}
+                                className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all ${selectedModality === 'singles' ? 'bg-tennis-green text-tennis-dark' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                {t('admin.tournaments.modalities.singles')}
+                            </button>
+                            <button
+                                onClick={() => setSelectedModality('doubles')}
+                                className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all ${selectedModality === 'doubles' ? 'bg-tennis-green text-tennis-dark' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                {t('admin.tournaments.modalities.doubles')}
+                            </button>
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
 
             {/* Content Area */}
             <div className="min-h-[500px]">
@@ -547,7 +612,11 @@ const TournamentMatchesPage = () => {
                         ) : (
                             <div className="space-y-10">
                                 {Object.keys(matchesByGroupName).sort().map(groupName => {
-                                    const group = groups.find(g => g.name === groupName && (selectedCategory === 'all' || g.category === selectedCategory));
+                                    const group = groups.find(g =>
+                                        g.name === groupName &&
+                                        (selectedCategory === '' || g.category === selectedCategory) &&
+                                        (selectedModality === 'doubles' ? g.isDoubles : !g.isDoubles)
+                                    );
                                     const isFinalized = group?.status === 'completed';
 
                                     return (
@@ -578,7 +647,7 @@ const TournamentMatchesPage = () => {
                                                                 t('common.undo'),
                                                                 t('common.undoConfirm'),
                                                                 async () => {
-                                                                    await unfinalizeGroup(id!, groupName, selectedCategory === 'all' ? undefined : selectedCategory);
+                                                                    await unfinalizeGroup(id!, groupName, selectedCategory === '' ? undefined : selectedCategory);
                                                                     await loadData();
                                                                     setConfirmModal(prev => ({ ...prev, open: false }));
                                                                 },
@@ -607,12 +676,22 @@ const TournamentMatchesPage = () => {
                                                         </div>
                                                         <div className="space-y-2">
                                                             <div className="flex items-center justify-between">
-                                                                <span className={`font-bold text-sm ${match.winnerId === match.player1Uid ? 'text-tennis-green' : 'text-white'}`}>{match.player1Name}</span>
-                                                                {match.winnerId === match.player1Uid && <CheckCircle2 size={14} className="text-tennis-green" />}
+                                                                <span className={`font-bold text-sm ${match.isDoubles
+                                                                    ? (match.winnerTeamId === match.team1Id ? 'text-tennis-green' : 'text-white')
+                                                                    : (match.winnerId === match.player1Uid ? 'text-tennis-green' : 'text-white')
+                                                                    }`}>
+                                                                    {match.isDoubles ? match.team1Name : match.player1Name}
+                                                                </span>
+                                                                {(match.isDoubles ? (match.winnerTeamId === match.team1Id) : (match.winnerId === match.player1Uid)) && <CheckCircle2 size={14} className="text-tennis-green" />}
                                                             </div>
                                                             <div className="flex items-center justify-between">
-                                                                <span className={`font-bold text-sm ${match.winnerId === match.player2Uid ? 'text-tennis-green' : 'text-white'}`}>{match.player2Name}</span>
-                                                                {match.winnerId === match.player2Uid && <CheckCircle2 size={14} className="text-tennis-green" />}
+                                                                <span className={`font-bold text-sm ${match.isDoubles
+                                                                    ? (match.winnerTeamId === match.team2Id ? 'text-tennis-green' : 'text-white')
+                                                                    : (match.winnerId === match.player2Uid ? 'text-tennis-green' : 'text-white')
+                                                                    }`}>
+                                                                    {match.isDoubles ? match.team2Name : match.player2Name}
+                                                                </span>
+                                                                {(match.isDoubles ? (match.winnerTeamId === match.team2Id) : (match.winnerId === match.player2Uid)) && <CheckCircle2 size={14} className="text-tennis-green" />}
                                                             </div>
                                                         </div>
                                                         <div className="pt-3 border-t border-white/5 flex justify-center bg-white/5 -mx-5 -mb-5 rounded-b-3xl py-2">
@@ -635,7 +714,7 @@ const TournamentMatchesPage = () => {
                                     t('admin.tournaments.resetGroupStage'),
                                     t('admin.tournaments.resetGroupConfirm'),
                                     async () => {
-                                        await resetGroupStage(id!, selectedCategory === 'all' ? undefined : selectedCategory);
+                                        await resetGroupStage(id!, selectedCategory === '' ? undefined : selectedCategory);
                                         await loadData();
                                         setConfirmModal(prev => ({ ...prev, open: false }));
                                     },
@@ -730,7 +809,7 @@ const TournamentMatchesPage = () => {
                                             t('admin.tournaments.resetDraw'),
                                             t('admin.tournaments.resetDrawConfirm'),
                                             async () => {
-                                                await deleteBracketMatches(id!);
+                                                await deleteBracketMatches(id!, selectedCategory === '' ? undefined : (selectedCategory as any), selectedModality);
                                                 await loadData();
                                                 setConfirmModal(prev => ({ ...prev, open: false }));
                                             },
@@ -748,372 +827,402 @@ const TournamentMatchesPage = () => {
             </div>
 
             {/* Score Entry Slide-over */}
-            {selectedMatch && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity no-print" onClick={() => setSelectedMatch(null)}></div>
-                    <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-950 border-l border-white/10 z-50 p-12 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right no-print">
-                        <div className="flex justify-between items-center mb-10">
-                            <div>
-                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.matches.enterResult')}</h2>
-                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.matches.officialResult')}</p>
-                            </div>
-                            <button onClick={() => setSelectedMatch(null)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-12">
-                            {/* Match Summary */}
-                            <div className="bg-white/5 border border-white/10 rounded-[32px] p-8">
-                                <div className="grid grid-cols-2 gap-8 items-center relative">
-                                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-gray-950 border border-white/10 rounded-full flex items-center justify-center z-10 text-[10px] font-black text-gray-600">VS</div>
-                                    <div className={`text-center space-y-3 p-4 rounded-2xl transition-all ${winnerId === selectedMatch.player1Uid ? 'bg-tennis-green/10 ring-1 ring-tennis-green/20' : ''}`}>
-                                        <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto text-white">
-                                            <Users size={24} />
-                                        </div>
-                                        <p className={`font-black uppercase tracking-tight break-words ${winnerId === selectedMatch.player1Uid ? 'text-tennis-green' : 'text-white'}`}>{selectedMatch.player1Name}</p>
-                                    </div>
-                                    <div className={`text-center space-y-3 p-4 rounded-2xl transition-all ${winnerId === selectedMatch.player2Uid ? 'bg-tennis-green/10 ring-1 ring-tennis-green/20' : ''}`}>
-                                        <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto text-white">
-                                            <Users size={24} />
-                                        </div>
-                                        <p className={`font-black uppercase tracking-tight break-words ${winnerId === selectedMatch.player2Uid ? 'text-tennis-green' : 'text-white'}`}>{selectedMatch.player2Name}</p>
-                                    </div>
+            {
+                selectedMatch && (
+                    <>
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity no-print" onClick={() => setSelectedMatch(null)}></div>
+                        <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-950 border-l border-white/10 z-50 p-12 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right no-print">
+                            <div className="flex justify-between items-center mb-10">
+                                <div>
+                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.matches.enterResult')}</h2>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.matches.officialResult')}</p>
                                 </div>
-                            </div>
-
-                            {/* Sets Entry */}
-                            <div className="space-y-6">
-                                <h3 className="text-white text-lg font-bold">{t('admin.tournaments.matches.setResults')}</h3>
-                                {[0, 1, 2].map((i) => (
-                                    <div key={i} className="flex items-center gap-6">
-                                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 font-black text-xs">{t('tournaments.setNum', { num: i + 1 })}</div>
-                                        <div className="flex-1 grid grid-cols-2 gap-4">
-                                            <input
-                                                type="number"
-                                                className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-xl font-bold focus:outline-none focus:border-tennis-green/50"
-                                                value={scoreSets[i].player1}
-                                                onChange={(e) => updateSet(i, parseInt(e.target.value) || 0, scoreSets[i].player2)}
-                                            />
-                                            <input
-                                                type="number"
-                                                className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-xl font-bold focus:outline-none focus:border-tennis-green/50"
-                                                value={scoreSets[i].player2}
-                                                onChange={(e) => updateSet(i, scoreSets[i].player1, parseInt(e.target.value) || 0)}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Options */}
-                            <div className="space-y-4">
-                                <button
-                                    onClick={() => setIsWithdrawal(!isWithdrawal)}
-                                    className={`w-full p-6 rounded-[24px] border border-dashed transition-all flex items-center justify-between ${isWithdrawal ? 'bg-red-500/10 border-red-500/50 text-red-500' : 'bg-transparent border-white/10 text-gray-500 hover:border-white/30'}`}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <X size={24} />
-                                        <div className="text-left">
-                                            <p className="font-bold text-sm uppercase tracking-tight leading-none">{t('admin.tournaments.matches.declareWithdrawal')}</p>
-                                            <p className="text-[10px] font-bold mt-1 opacity-60">{t('admin.tournaments.matches.victoryDefault')}</p>
-                                        </div>
-                                    </div>
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isWithdrawal ? 'border-red-500 bg-red-500' : 'border-gray-800'}`}>
-                                        {isWithdrawal && <CheckCircle2 size={14} className="text-white" />}
-                                    </div>
+                                <button onClick={() => setSelectedMatch(null)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
+                                    <X size={24} />
                                 </button>
                             </div>
 
-                            {/* Winner Selection */}
-                            <div className="space-y-4">
-                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">{t('admin.tournaments.matches.declaredWinner')}</p>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <button
-                                        onClick={() => setWinnerId(selectedMatch.player1Uid)}
-                                        className={`p-5 rounded-2xl font-black uppercase tracking-tight break-words text-xs transition-all ${winnerId === selectedMatch.player1Uid ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-white border border-white/10'}`}
-                                    >
-                                        {selectedMatch.player1Name}
-                                    </button>
-                                    <button
-                                        onClick={() => setWinnerId(selectedMatch.player2Uid)}
-                                        className={`p-5 rounded-2xl font-black uppercase tracking-tight break-words text-xs transition-all ${winnerId === selectedMatch.player2Uid ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-white border border-white/10'}`}
-                                    >
-                                        {selectedMatch.player2Name}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <button
-                                disabled={!winnerId || processing}
-                                onClick={handleSaveScore}
-                                className="w-full bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark py-6 rounded-[32px] font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-10"
-                            >
-                                {processing ? <RefreshCw className="animate-spin" /> : <Save size={24} />}
-                                {t('common.confirmResult')}
-                            </button>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Admin Tools Modal */}
-            {isAdminToolsOpen && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] no-print" onClick={() => setIsAdminToolsOpen(false)}></div>
-                    <div className="fixed right-0 top-0 h-full w-full max-w-md bg-gray-950 border-l border-white/10 z-[70] p-10 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right no-print">
-                        <div className="flex justify-between items-center mb-8">
-                            <div>
-                                <h2 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.title')}</h2>
-                                <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-1">{tournament?.name}</p>
-                            </div>
-                            <button onClick={() => setIsAdminToolsOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-10">
-                            {/* Quick Actions */}
-                            <section className="space-y-4">
-                                <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.quickActions')}</h3>
-                                <div className="grid grid-cols-1 gap-3">
-                                    <button
-                                        onClick={handleSimulateResults}
-                                        className="w-full p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all flex items-center gap-4 group"
-                                    >
-                                        <div className="w-10 h-10 rounded-xl bg-tennis-green/10 text-tennis-green flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <Wand2 size={20} />
+                            <div className="space-y-12">
+                                {/* Match Summary */}
+                                <div className="bg-white/5 border border-white/10 rounded-[32px] p-8">
+                                    <div className="grid grid-cols-2 gap-8 items-center relative">
+                                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-gray-950 border border-white/10 rounded-full flex items-center justify-center z-10 text-[10px] font-black text-gray-600">VS</div>
+                                        <div className={`text-center space-y-3 p-4 rounded-2xl transition-all ${selectedMatch.isDoubles
+                                            ? (winnerId === selectedMatch.team1Id ? 'bg-tennis-green/10 ring-1 ring-tennis-green/20' : '')
+                                            : (winnerId === selectedMatch.player1Uid ? 'bg-tennis-green/10 ring-1 ring-tennis-green/20' : '')
+                                            }`}>
+                                            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto text-white">
+                                                <Users size={24} />
+                                            </div>
+                                            <p className={`font-black uppercase tracking-tight break-words ${selectedMatch.isDoubles
+                                                ? (winnerId === selectedMatch.team1Id ? 'text-tennis-green' : 'text-white')
+                                                : (winnerId === selectedMatch.player1Uid ? 'text-tennis-green' : 'text-white')
+                                                }`}>
+                                                {selectedMatch.isDoubles ? selectedMatch.team1Name : selectedMatch.player1Name}
+                                            </p>
                                         </div>
-                                        <div className="text-left">
-                                            <p className="text-white font-bold text-sm tracking-tight">{t('admin.tournaments.tools.simulate')}</p>
-                                            <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">{t('admin.tournaments.tools.groupResults')}</p>
+                                        <div className={`text-center space-y-3 p-4 rounded-2xl transition-all ${selectedMatch.isDoubles
+                                            ? (winnerId === selectedMatch.team2Id ? 'bg-tennis-green/10 ring-1 ring-tennis-green/20' : '')
+                                            : (winnerId === selectedMatch.player2Uid ? 'bg-tennis-green/10 ring-1 ring-tennis-green/20' : '')
+                                            }`}>
+                                            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto text-white">
+                                                <Users size={24} />
+                                            </div>
+                                            <p className={`font-black uppercase tracking-tight break-words ${selectedMatch.isDoubles
+                                                ? (winnerId === selectedMatch.team2Id ? 'text-tennis-green' : 'text-white')
+                                                : (winnerId === selectedMatch.player2Uid ? 'text-tennis-green' : 'text-white')
+                                                }`}>
+                                                {selectedMatch.isDoubles ? selectedMatch.team2Name : selectedMatch.player2Name}
+                                            </p>
                                         </div>
-                                    </button>
+                                    </div>
                                 </div>
-                            </section>
 
-                            {/* Group Management */}
-                            <section className="space-y-4">
-                                <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.groupManagement')}</h3>
-                                <div className="space-y-3">
-                                    {groups.sort((a, b) => a.name.localeCompare(b.name)).map(group => (
-                                        <div key={group.name} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center font-black text-white text-xs border border-white/10">
-                                                        {group.name}
-                                                    </div>
-                                                    <span className="text-white font-bold text-sm">{t('tournaments.group')} {group.name}</span>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => handleOpenAddPlayer(group.name, group.category)}
-                                                        disabled={group.status === 'completed'}
-                                                        className={`p-2 rounded-lg transition-all ${group.status === 'completed'
-                                                            ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-30'
-                                                            : 'bg-tennis-green/10 text-tennis-green hover:bg-tennis-green/20'}`}
-                                                        title={group.status === 'completed' ? t('tournaments.status.completed') : t('admin.tournaments.tools.addToGroup')}
-                                                    >
-                                                        <UserPlus size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleOpenRemovePlayer(group.name, group.category)}
-                                                        disabled={group.status === 'completed'}
-                                                        className={`p-2 rounded-lg transition-all ${group.status === 'completed'
-                                                            ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-30'
-                                                            : 'bg-red-500/10 text-red-500 hover:bg-red-500/20'}`}
-                                                        title={group.status === 'completed' ? t('tournaments.status.completed') : t('admin.tournaments.tools.removeFromGroup')}
-                                                    >
-                                                        <UserMinus size={16} />
-                                                    </button>
-                                                </div>
+                                {/* Sets Entry */}
+                                <div className="space-y-6">
+                                    <h3 className="text-white text-lg font-bold">{t('admin.tournaments.matches.setResults')}</h3>
+                                    {[0, 1, 2].map((i) => (
+                                        <div key={i} className="flex items-center gap-6">
+                                            <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 font-black text-xs">{t('tournaments.setNum', { num: i + 1 })}</div>
+                                            <div className="flex-1 grid grid-cols-2 gap-4">
+                                                <input
+                                                    type="number"
+                                                    className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-xl font-bold focus:outline-none focus:border-tennis-green/50"
+                                                    value={scoreSets[i].player1}
+                                                    onChange={(e) => updateSet(i, parseInt(e.target.value) || 0, scoreSets[i].player2)}
+                                                />
+                                                <input
+                                                    type="number"
+                                                    className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-xl font-bold focus:outline-none focus:border-tennis-green/50"
+                                                    value={scoreSets[i].player2}
+                                                    onChange={(e) => updateSet(i, scoreSets[i].player1, parseInt(e.target.value) || 0)}
+                                                />
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                            </section>
 
-                            {/* Scoring Configuration */}
-                            <section className="space-y-4">
-                                <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.scoring.title')}</h3>
-                                <div className="p-6 rounded-3xl bg-white/5 border border-white/5 space-y-6">
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.win')}</label>
-                                            <input
-                                                type="number"
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-tennis-green/50 outline-none"
-                                                value={scoringConfig.win}
-                                                onChange={(e) => setScoringConfig(prev => ({ ...prev, win: parseInt(e.target.value) || 0 }))}
-                                            />
+                                {/* Options */}
+                                <div className="space-y-4">
+                                    <button
+                                        onClick={() => setIsWithdrawal(!isWithdrawal)}
+                                        className={`w-full p-6 rounded-[24px] border border-dashed transition-all flex items-center justify-between ${isWithdrawal ? 'bg-red-500/10 border-red-500/50 text-red-500' : 'bg-transparent border-white/10 text-gray-500 hover:border-white/30'}`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <X size={24} />
+                                            <div className="text-left">
+                                                <p className="font-bold text-sm uppercase tracking-tight leading-none">{t('admin.tournaments.matches.declareWithdrawal')}</p>
+                                                <p className="text-[10px] font-bold mt-1 opacity-60">{t('admin.tournaments.matches.victoryDefault')}</p>
+                                            </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.loss')}</label>
-                                            <input
-                                                type="number"
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-red-500/50 outline-none"
-                                                value={scoringConfig.loss}
-                                                onChange={(e) => setScoringConfig(prev => ({ ...prev, loss: parseInt(e.target.value) || 0 }))}
-                                            />
+                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isWithdrawal ? 'border-red-500 bg-red-500' : 'border-gray-800'}`}>
+                                            {isWithdrawal && <CheckCircle2 size={14} className="text-white" />}
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.withdraw')}</label>
-                                            <input
-                                                type="number"
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-gray-500 outline-none"
-                                                value={scoringConfig.withdraw}
-                                                onChange={(e) => setScoringConfig(prev => ({ ...prev, withdraw: parseInt(e.target.value) || 0 }))}
-                                            />
-                                        </div>
+                                    </button>
+                                </div>
+
+                                {/* Winner Selection */}
+                                <div className="space-y-4">
+                                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">{t('admin.tournaments.matches.declaredWinner')}</p>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button
+                                            onClick={() => setWinnerId(selectedMatch.isDoubles ? selectedMatch.team1Id! : selectedMatch.player1Uid!)}
+                                            className={`p-5 rounded-2xl font-black uppercase tracking-tight break-words text-xs transition-all ${selectedMatch.isDoubles
+                                                ? (winnerId === selectedMatch.team1Id ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-white border border-white/10')
+                                                : (winnerId === selectedMatch.player1Uid ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-white border border-white/10')
+                                                }`}
+                                        >
+                                            {selectedMatch.isDoubles ? selectedMatch.team1Name : selectedMatch.player1Name}
+                                        </button>
+                                        <button
+                                            onClick={() => setWinnerId(selectedMatch.isDoubles ? selectedMatch.team2Id! : selectedMatch.player2Uid!)}
+                                            className={`p-5 rounded-2xl font-black uppercase tracking-tight break-words text-xs transition-all ${selectedMatch.isDoubles
+                                                ? (winnerId === selectedMatch.team2Id ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-white border border-white/10')
+                                                : (winnerId === selectedMatch.player2Uid ? 'bg-tennis-green text-tennis-dark' : 'bg-white/5 text-white border border-white/10')
+                                                }`}
+                                        >
+                                            {selectedMatch.isDoubles ? selectedMatch.team2Name : selectedMatch.player2Name}
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={handleUpdateScoring}
-                                        disabled={processing}
-                                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/5 flex items-center justify-center gap-2"
-                                    >
-                                        {processing ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                                        {t('admin.tournaments.tools.updateScoring')}
-                                    </button>
                                 </div>
-                            </section>
 
-                            {/* Danger Zone */}
-                            <section className="space-y-4 pt-4 border-t border-white/5">
-                                <h3 className="text-red-500/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.dangerZone')}</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => showConfirmation(
-                                            t('admin.tournaments.resetGroupStage'),
-                                            t('admin.tournaments.matches.confirmResetGroups'),
-                                            async () => {
-                                                await resetGroupStage(id!, selectedCategory === 'all' ? undefined : selectedCategory);
-                                                await loadData();
-                                                setConfirmModal(prev => ({ ...prev, open: false }));
-                                            },
-                                            'danger'
-                                        )}
-                                        className="p-4 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition-all flex flex-col items-center gap-2 text-center"
-                                    >
-                                        <Trash2 size={18} />
-                                        <span className="text-[10px] font-black uppercase tracking-tight">{t('admin.tournaments.tools.resetGroups')}</span>
-                                    </button>
-                                    <button
-                                        onClick={() => showConfirmation(
-                                            t('admin.tournaments.resetMainDraw'),
-                                            t('admin.tournaments.matches.confirmResetKnockout'),
-                                            async () => {
-                                                await deleteBracketMatches(id!);
-                                                await loadData();
-                                                setConfirmModal(prev => ({ ...prev, open: false }));
-                                            },
-                                            'danger'
-                                        )}
-                                        className="p-4 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition-all flex flex-col items-center gap-2 text-center"
-                                    >
-                                        <Zap size={18} />
-                                        <span className="text-[10px] font-black uppercase tracking-tight">{t('admin.tournaments.tools.resetMainDraw')}</span>
-                                    </button>
-                                </div>
-                            </section>
+                                <button
+                                    disabled={!winnerId || processing}
+                                    onClick={handleSaveScore}
+                                    className="w-full bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark py-6 rounded-[32px] font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-10"
+                                >
+                                    {processing ? <RefreshCw className="animate-spin" /> : <Save size={24} />}
+                                    {t('common.confirmResult')}
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                </>
-            )}
+                    </>
+                )
+            }
+
+            {/* Admin Tools Modal */}
+            {
+                isAdminToolsOpen && (
+                    <>
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] no-print" onClick={() => setIsAdminToolsOpen(false)}></div>
+                        <div className="fixed right-0 top-0 h-full w-full max-w-md bg-gray-950 border-l border-white/10 z-[70] p-10 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right no-print">
+                            <div className="flex justify-between items-center mb-8">
+                                <div>
+                                    <h2 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.title')}</h2>
+                                    <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-1">{tournament?.name}</p>
+                                </div>
+                                <button onClick={() => setIsAdminToolsOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-10">
+                                {/* Quick Actions */}
+                                <section className="space-y-4">
+                                    <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.quickActions')}</h3>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        <button
+                                            onClick={handleSimulateResults}
+                                            className="w-full p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all flex items-center gap-4 group"
+                                        >
+                                            <div className="w-10 h-10 rounded-xl bg-tennis-green/10 text-tennis-green flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <Wand2 size={20} />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-white font-bold text-sm tracking-tight">{t('admin.tournaments.tools.simulate')}</p>
+                                                <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">{t('admin.tournaments.tools.groupResults')}</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </section>
+
+                                {/* Group Management */}
+                                <section className="space-y-4">
+                                    <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.groupManagement')}</h3>
+                                    <div className="space-y-3">
+                                        {groups.sort((a, b) => a.name.localeCompare(b.name)).map(group => (
+                                            <div key={group.name} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center font-black text-white text-xs border border-white/10">
+                                                            {group.name}
+                                                        </div>
+                                                        <span className="text-white font-bold text-sm">{t('tournaments.group')} {group.name}</span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleOpenAddPlayer(group.name, group.category)}
+                                                            disabled={group.status === 'completed'}
+                                                            className={`p-2 rounded-lg transition-all ${group.status === 'completed'
+                                                                ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-30'
+                                                                : 'bg-tennis-green/10 text-tennis-green hover:bg-tennis-green/20'}`}
+                                                            title={group.status === 'completed' ? t('tournaments.status.completed') : t('admin.tournaments.tools.addToGroup')}
+                                                        >
+                                                            <UserPlus size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleOpenRemovePlayer(group.name, group.category)}
+                                                            disabled={group.status === 'completed'}
+                                                            className={`p-2 rounded-lg transition-all ${group.status === 'completed'
+                                                                ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-30'
+                                                                : 'bg-red-500/10 text-red-500 hover:bg-red-500/20'}`}
+                                                            title={group.status === 'completed' ? t('tournaments.status.completed') : t('admin.tournaments.tools.removeFromGroup')}
+                                                        >
+                                                            <UserMinus size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                {/* Scoring Configuration */}
+                                <section className="space-y-4">
+                                    <h3 className="text-white/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.scoring.title')}</h3>
+                                    <div className="p-6 rounded-3xl bg-white/5 border border-white/5 space-y-6">
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.win')}</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-tennis-green/50 outline-none"
+                                                    value={scoringConfig.win}
+                                                    onChange={(e) => setScoringConfig(prev => ({ ...prev, win: parseInt(e.target.value) || 0 }))}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.loss')}</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-red-500/50 outline-none"
+                                                    value={scoringConfig.loss}
+                                                    onChange={(e) => setScoringConfig(prev => ({ ...prev, loss: parseInt(e.target.value) || 0 }))}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center block">{t('admin.tournaments.scoring.withdraw')}</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-center text-white font-bold focus:border-gray-500 outline-none"
+                                                    value={scoringConfig.withdraw}
+                                                    onChange={(e) => setScoringConfig(prev => ({ ...prev, withdraw: parseInt(e.target.value) || 0 }))}
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={handleUpdateScoring}
+                                            disabled={processing}
+                                            className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/5 flex items-center justify-center gap-2"
+                                        >
+                                            {processing ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                                            {t('admin.tournaments.tools.updateScoring')}
+                                        </button>
+                                    </div>
+                                </section>
+
+                                {/* Danger Zone */}
+                                <section className="space-y-4 pt-4 border-t border-white/5">
+                                    <h3 className="text-red-500/30 text-[10px] font-black uppercase tracking-[0.2em]">{t('admin.tournaments.tools.dangerZone')}</h3>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => showConfirmation(
+                                                t('admin.tournaments.resetGroupStage'),
+                                                t('admin.tournaments.matches.confirmResetGroups'),
+                                                async () => {
+                                                    await resetGroupStage(id!, selectedCategory === '' ? undefined : selectedCategory, selectedModality);
+                                                    await loadData();
+                                                    setConfirmModal(prev => ({ ...prev, open: false }));
+                                                },
+                                                'danger'
+                                            )}
+                                            className="p-4 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition-all flex flex-col items-center gap-2 text-center"
+                                        >
+                                            <Trash2 size={18} />
+                                            <span className="text-[10px] font-black uppercase tracking-tight">{t('admin.tournaments.tools.resetGroups')}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => showConfirmation(
+                                                t('admin.tournaments.resetMainDraw'),
+                                                t('admin.tournaments.matches.confirmResetKnockout'),
+                                                async () => {
+                                                    await deleteBracketMatches(id!, selectedCategory === '' ? undefined : (selectedCategory as any), selectedModality);
+                                                    await loadData();
+                                                    setConfirmModal(prev => ({ ...prev, open: false }));
+                                                },
+                                                'danger'
+                                            )}
+                                            className="p-4 rounded-xl bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 transition-all flex flex-col items-center gap-2 text-center"
+                                        >
+                                            <Zap size={18} />
+                                            <span className="text-[10px] font-black uppercase tracking-tight">{t('admin.tournaments.tools.resetMainDraw')}</span>
+                                        </button>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    </>
+                )
+            }
 
             {/* Add Player Modal */}
-            {isAddPlayerModalOpen && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[80] flex items-center justify-center p-6 animate-fade-in no-print">
-                    <div className="glass max-w-lg w-full p-10 rounded-[40px] border-white/10 space-y-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.addToGroup')}</h3>
-                                <p className="text-tennis-green text-xs font-bold uppercase tracking-widest mt-1">
-                                    {t('tournaments.group')} {selectedGroupForManagement}
-                                </p>
+            {
+                isAddPlayerModalOpen && (
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[80] flex items-center justify-center p-6 animate-fade-in no-print">
+                        <div className="glass max-w-lg w-full p-10 rounded-[40px] border-white/10 space-y-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.addToGroup')}</h3>
+                                    <p className="text-tennis-green text-xs font-bold uppercase tracking-widest mt-1">
+                                        {t('tournaments.group')} {selectedGroupForManagement}
+                                    </p>
+                                </div>
+                                <button onClick={() => setIsAddPlayerModalOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <button onClick={() => setIsAddPlayerModalOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                <X size={20} />
-                            </button>
-                        </div>
 
-                        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                            {availablePlayers.length === 0 ? (
-                                <p className="text-center text-gray-500 font-bold py-10">{t('admin.tournaments.noPlayers')}</p>
-                            ) : (
-                                availablePlayers.map(player => (
-                                    <button
-                                        key={player.id}
-                                        onClick={() => handleAddPlayer(player.id)}
-                                        disabled={processing}
-                                        className="w-full p-5 rounded-2xl bg-white/5 hover:bg-tennis-green hover:text-tennis-dark transition-all flex items-center justify-between group border border-white/5"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-bold text-tennis-green group-hover:bg-tennis-dark/10 group-hover:text-tennis-dark">
-                                                <Users size={20} />
+                            <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                                {availablePlayers.length === 0 ? (
+                                    <p className="text-center text-gray-500 font-bold py-10">{t('admin.tournaments.noPlayers')}</p>
+                                ) : (
+                                    availablePlayers.map(player => (
+                                        <button
+                                            key={player.id}
+                                            onClick={() => handleAddPlayer(player.id)}
+                                            disabled={processing}
+                                            className="w-full p-5 rounded-2xl bg-white/5 hover:bg-tennis-green hover:text-tennis-dark transition-all flex items-center justify-between group border border-white/5"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-bold text-tennis-green group-hover:bg-tennis-dark/10 group-hover:text-tennis-dark">
+                                                    <Users size={20} />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-sm">{selectedModality === 'doubles' ? (player.teamName || `${player.player1Name} / ${player.player2Name}`) : player.name}</p>
+                                                    <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{player.category || t('admin.tournaments.noCategory')}</p>
+                                                </div>
                                             </div>
-                                            <div className="text-left">
-                                                <p className="font-bold text-sm">{player.name}</p>
-                                                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{player.category || t('admin.tournaments.noCategory')}</p>
-                                            </div>
-                                        </div>
-                                        <Plus size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </button>
-                                ))
-                            )}
+                                            <Plus size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Remove Player Modal */}
-            {isRemovePlayerModalOpen && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[80] flex items-center justify-center p-6 animate-fade-in no-print">
-                    <div className="glass max-w-lg w-full p-10 rounded-[40px] border-white/10 space-y-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.removeFromGroup')}</h3>
-                                <p className="text-red-500 text-xs font-bold uppercase tracking-widest mt-1">
-                                    {t('tournaments.group')} {selectedGroupForManagement}
-                                </p>
+            {
+                isRemovePlayerModalOpen && (
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[80] flex items-center justify-center p-6 animate-fade-in no-print">
+                        <div className="glass max-w-lg w-full p-10 rounded-[40px] border-white/10 space-y-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.tools.removeFromGroup')}</h3>
+                                    <p className="text-red-500 text-xs font-bold uppercase tracking-widest mt-1">
+                                        {t('tournaments.group')} {selectedGroupForManagement}
+                                    </p>
+                                </div>
+                                <button onClick={() => setIsRemovePlayerModalOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <button onClick={() => setIsRemovePlayerModalOpen(false)} className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                <X size={20} />
-                            </button>
-                        </div>
 
-                        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                            {groupPlayers.length === 0 ? (
-                                <p className="text-center text-gray-500 font-bold py-10">{t('admin.tournaments.noPlayers')}</p>
-                            ) : (
-                                groupPlayers.map(player => (
-                                    <button
-                                        key={player.id}
-                                        onClick={() => showConfirmation(
-                                            t('admin.tournaments.matches.removePlayerTitle'),
-                                            t('admin.tournaments.matches.removePlayerConfirm'),
-                                            () => handleRemovePlayer(player.id),
-                                            'danger'
-                                        )}
-                                        disabled={processing}
-                                        className="w-full p-5 rounded-2xl bg-white/5 hover:bg-red-500 hover:text-white transition-all flex items-center justify-between group border border-white/5"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-bold text-red-500 group-hover:bg-red-700/20 group-hover:text-white">
-                                                <Users size={20} />
+                            <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                                {groupPlayers.length === 0 ? (
+                                    <p className="text-center text-gray-500 font-bold py-10">{t('admin.tournaments.noPlayers')}</p>
+                                ) : (
+                                    groupPlayers.map(player => (
+                                        <button
+                                            key={player.id}
+                                            onClick={() => showConfirmation(
+                                                t('admin.tournaments.matches.removePlayerTitle'),
+                                                t('admin.tournaments.matches.removePlayerConfirm'),
+                                                () => handleRemovePlayer(player.id),
+                                                'danger'
+                                            )}
+                                            disabled={processing}
+                                            className="w-full p-5 rounded-2xl bg-white/5 hover:bg-red-500 hover:text-white transition-all flex items-center justify-between group border border-white/5"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-bold text-red-500 group-hover:bg-red-700/20 group-hover:text-white">
+                                                    <Users size={20} />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-sm">{selectedModality === 'doubles' ? player.teamName : player.name}</p>
+                                                    <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{player.category || t('admin.tournaments.noCategory')}</p>
+                                                </div>
                                             </div>
-                                            <div className="text-left">
-                                                <p className="font-bold text-sm">{player.name}</p>
-                                                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{player.category || t('admin.tournaments.noCategory')}</p>
-                                            </div>
-                                        </div>
-                                        <Trash2 size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </button>
-                                ))
-                            )}
+                                            <Trash2 size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Print Styles */}
             <style>{`
@@ -1134,90 +1243,104 @@ const TournamentMatchesPage = () => {
             `}</style>
 
             {/* Generic Confirmation Modal */}
-            {confirmModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fade-in no-print">
-                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                            <AlertTriangle size={32} />
-                        </div>
-                        <div className="space-y-2">
-                            <h3 className="text-white text-2xl font-bold">{confirmModal.title}</h3>
-                            <p className="text-gray-400 leading-relaxed">{confirmModal.message}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                            <button
-                                onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
-                            >
-                                {t('common.cancel')}
-                            </button>
-                            <button
-                                onClick={confirmModal.onConfirm}
-                                disabled={processing}
-                                className={`py-4 rounded-2xl font-bold transition-colors flex items-center justify-center gap-2 ${confirmModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark'}`}
-                            >
-                                {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
-                            </button>
+            {
+                confirmModal.open && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fade-in no-print">
+                        <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                                <AlertTriangle size={32} />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-white text-2xl font-bold">{confirmModal.title}</h3>
+                                <p className="text-gray-400 leading-relaxed">{confirmModal.message}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                {confirmModal.type !== 'success' && (
+                                    <button
+                                        onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                                        className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                                    >
+                                        {t('common.cancel')}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        if (confirmModal.type === 'success') {
+                                            setConfirmModal(prev => ({ ...prev, open: false }));
+                                        } else {
+                                            confirmModal.onConfirm().then(() => setConfirmModal(prev => ({ ...prev, open: false })));
+                                        }
+                                    }}
+                                    disabled={processing}
+                                    className={`py-4 rounded-2xl font-bold transition-colors flex items-center justify-center gap-2 ${confirmModal.type === 'success' ? 'bg-tennis-green text-tennis-dark' : confirmModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark'} ${confirmModal.type === 'success' ? 'col-span-2' : ''}`}
+                                >
+                                    {processing ? <RefreshCw className="animate-spin" size={20} /> : (confirmModal.type === 'success' ? t('common.close') : t('common.confirm'))}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Error Modal */}
-            {errorModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in no-print">
-                    <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
-                        <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
-                            <AlertTriangle size={32} />
+            {
+                errorModal.open && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in no-print">
+                        <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                            <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
+                                <AlertTriangle size={32} />
+                            </div>
+                            <h3 className="text-white text-xl font-bold">{t('common.error')}</h3>
+                            <p className="text-gray-400">{errorModal.message}</p>
+                            <button
+                                onClick={() => setErrorModal(prev => ({ ...prev, open: false }))}
+                                className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                            >
+                                {t('common.close')}
+                            </button>
                         </div>
-                        <h3 className="text-white text-xl font-bold">{t('common.error')}</h3>
-                        <p className="text-gray-400">{errorModal.message}</p>
-                        <button
-                            onClick={() => setErrorModal(prev => ({ ...prev, open: false }))}
-                            className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
-                        >
-                            {t('common.close')}
-                        </button>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Input Modal */}
-            {inputModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-6 animate-fade-in no-print">
-                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
-                        <div className="space-y-2">
-                            <h3 className="text-white text-2xl font-bold">{inputModal.title}</h3>
-                            <p className="text-gray-400 leading-relaxed">{inputModal.description}</p>
-                        </div>
+            {
+                inputModal.open && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-6 animate-fade-in no-print">
+                        <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                            <div className="space-y-2">
+                                <h3 className="text-white text-2xl font-bold">{inputModal.title}</h3>
+                                <p className="text-gray-400 leading-relaxed">{inputModal.description}</p>
+                            </div>
 
-                        <input
-                            type="number"
-                            autoFocus
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-2xl font-bold focus:outline-none focus:border-tennis-green/50"
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                        />
+                            <input
+                                type="number"
+                                autoFocus
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white text-2xl font-bold focus:outline-none focus:border-tennis-green/50"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                            />
 
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                            <button
-                                onClick={() => setInputModal(prev => ({ ...prev, open: false }))}
-                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
-                            >
-                                {t('common.cancel')}
-                            </button>
-                            <button
-                                onClick={() => inputModal.onConfirm(inputValue)}
-                                disabled={processing || !inputValue}
-                                className="py-4 rounded-2xl bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark font-bold transition-colors flex items-center justify-center gap-2"
-                            >
-                                {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
-                            </button>
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <button
+                                    onClick={() => setInputModal(prev => ({ ...prev, open: false }))}
+                                    className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                                >
+                                    {t('common.cancel')}
+                                </button>
+                                <button
+                                    onClick={() => inputModal.onConfirm(inputValue)}
+                                    disabled={processing || !inputValue}
+                                    className="py-4 rounded-2xl bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

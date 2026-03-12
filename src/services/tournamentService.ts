@@ -6,7 +6,9 @@ import { createGroup } from './groupService';
 import { advanceWinner } from './bracketService';
 import type { Match, SetScore, TournamentCategory, TournamentData, TournamentPlayer } from './types';
 
-export const CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'rookie'];
+export const CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'rookie'];
+export const TENNIS_CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'rookie'];
+export const PADEL_CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
 
 export const createTournament = async (data: Omit<TournamentData, 'status' | 'createdAt'>) => {
     try {
@@ -107,58 +109,93 @@ export const getTournamentMatches = async (tournamentId: string) => {
 };
 
 /**
- * Seeded Snake Draft - Ensures top-ranked players are distributed across different groups
+ * Seeded Snake Draft - Ensures top-ranked players/teams are distributed across different groups
  * based on their club points or manual seeds.
  */
-export const assignGroupsToPlayers = async (tournamentId: string, numberOfGroups: number, category?: TournamentCategory, playersList?: TournamentPlayer[]) => {
+export const assignGroupsToPlayers = async (
+    tournamentId: string,
+    numberOfGroups: number,
+    category?: TournamentCategory,
+    playersList?: TournamentPlayer[],
+    modality: 'singles' | 'doubles' = 'singles'
+) => {
     try {
+        const isDoubles = modality === 'doubles';
         const tournament = await getTournamentById(tournamentId);
         if (!tournament) throw new Error("Tournament not found");
 
-        let players = playersList || await getTournamentPlayers(tournamentId);
+        let items: any[] = [];
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            items = await getDoublesTeams(tournamentId);
+        } else {
+            items = playersList || await getTournamentPlayers(tournamentId);
+        }
+
         // Sync Logic: Filter out rejected players AND filter by category
-        players = players.filter(p =>
+        items = items.filter(p =>
             p.registrationStatus !== 'rejected' &&
             (!category || p.category === category)
         );
-        if (players.length === 0) throw new Error("No players found");
+        if (items.length === 0) throw new Error("No players/teams found");
 
         // Validation: All players must be checked in and (paid or wildcard)
-        const unreadyPlayers = players.filter(p => !p.isCheckedIn || (p.paymentStatus !== 'paid' && !p.isWildcard));
-        if (unreadyPlayers.length > 0) {
-            const names = unreadyPlayers.map(p => p.name).join(", ");
+        let unreadyItems: any[] = [];
+        if (isDoubles) {
+            unreadyItems = items.filter(t => (!t.player1CheckedIn || !t.player2CheckedIn) || (t.paymentStatus !== 'paid' && !t.isWildcard));
+        } else {
+            unreadyItems = items.filter(p => !p.isCheckedIn || (p.paymentStatus !== 'paid' && !p.isWildcard));
+        }
+
+        if (unreadyItems.length > 0) {
+            const names = unreadyItems.map(p => p.name || p.teamName).join(", ");
             throw new Error(`PLAYERS_NOT_READY: ${names}`);
         }
 
-        // 1. Fetch points for players who don't have a manual seed
-        const playersWithRank = await Promise.all(
-            players.map(async (player) => {
-                let rankValue = player.seed ? (10000 - player.seed) : 0; // Manual seeds take priority
+        // 1. Fetch points for items who don't have a manual seed
+        const itemsWithRank = await Promise.all(
+            items.map(async (item) => {
+                let rankValue = item.seed ? (10000 - item.seed) : 0; // Manual seeds take priority
 
-                if (!player.seed && player.uid && tournament.clubId && !player.isManual) {
-                    try {
-                        const userDoc = await getDoc(doc(db, 'users', player.uid));
-                        if (userDoc.exists()) {
-                            const userData = userDoc.data();
-                            rankValue = userData?.clubs?.[tournament.clubId]?.points ?? 0;
+                if (!item.seed && !item.isManual) {
+                    if (isDoubles) {
+                        // Combined points for doubles
+                        let p1Points = 0;
+                        let p2Points = 0;
+                        if (item.player1Uid && tournament.clubId) {
+                            const u1 = await getDoc(doc(db, 'users', item.player1Uid));
+                            p1Points = u1.exists() ? (u1.data()?.clubs?.[tournament.clubId]?.points || 0) : 0;
                         }
-                    } catch (e) {
-                        console.warn(`Could not fetch points for player ${player.uid}`);
+                        if (item.player2Uid && tournament.clubId) {
+                            const u2 = await getDoc(doc(db, 'users', item.player2Uid));
+                            p2Points = u2.exists() ? (u2.data()?.clubs?.[tournament.clubId]?.points || 0) : 0;
+                        }
+                        rankValue = p1Points + p2Points;
+                    } else if (item.uid && tournament.clubId) {
+                        try {
+                            const userDoc = await getDoc(doc(db, 'users', item.uid));
+                            if (userDoc.exists()) {
+                                const userData = userDoc.data();
+                                rankValue = userData?.clubs?.[tournament.clubId]?.points ?? 0;
+                            }
+                        } catch (e) {
+                            console.warn(`Could not fetch points for player ${item.uid}`);
+                        }
                     }
                 }
-                return { ...player, rankValue };
+                return { ...item, rankValue };
             })
         );
 
         // 2. Sort by rankValue descending
-        const sortedPlayers = [...playersWithRank].sort((a, b) => b.rankValue - a.rankValue);
+        const sortedItems = [...itemsWithRank].sort((a, b) => b.rankValue - a.rankValue);
 
         const groupLetters = Array.from({ length: numberOfGroups }, (_, i) => String.fromCharCode(65 + i));
         const batch = writeBatch(db);
         const groupPlayerMap: { [group: string]: string[] } = {};
 
         // 3. Snake Draft Assignment
-        sortedPlayers.forEach((player, index) => {
+        sortedItems.forEach((item, index) => {
             const row = Math.floor(index / numberOfGroups);
             const posInRow = index % numberOfGroups;
 
@@ -168,22 +205,22 @@ export const assignGroupsToPlayers = async (tournamentId: string, numberOfGroups
                 : (numberOfGroups - 1 - posInRow);
 
             const groupName = groupLetters[groupIndex];
-            const playerRef = doc(db, "tournaments", tournamentId, "players", player.id);
+            const itemRef = doc(db, "tournaments", tournamentId, isDoubles ? "doublesTeams" : "players", item.id);
 
-            batch.update(playerRef, {
+            batch.update(itemRef, {
                 group: groupName,
                 seed: index + 1 // Assign official tournament seed
             });
 
             if (!groupPlayerMap[groupName]) groupPlayerMap[groupName] = [];
-            groupPlayerMap[groupName].push(player.id);
+            groupPlayerMap[groupName].push(item.id);
         });
 
         await batch.commit();
 
         // 4. Create Group Documents
-        for (const [groupName, playerIds] of Object.entries(groupPlayerMap)) {
-            await createGroup(tournamentId, groupName, playerIds, category);
+        for (const [groupName, itemIds] of Object.entries(groupPlayerMap)) {
+            await createGroup(tournamentId, groupName, itemIds, category, isDoubles);
         }
         return true;
     } catch (error) {
@@ -242,38 +279,68 @@ export const autoSeedPlayers = async (tournamentId: string, category?: Tournamen
     }
 };
 
-export const generateGroupStageMatches = async (tournamentId: string, category?: TournamentCategory) => {
+export const generateGroupStageMatches = async (tournamentId: string, category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles') => {
     try {
-        let players = await getTournamentPlayers(tournamentId);
+        const isDoubles = modality === 'doubles';
+        const tournament = await getTournamentById(tournamentId);
+        const sport = tournament?.sport || 'tennis';
+
+        let items: any[] = [];
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            items = await getDoublesTeams(tournamentId);
+        } else {
+            items = await getTournamentPlayers(tournamentId);
+        }
+
         // Sync Logic: Filter out rejected players AND filter by category
-        players = players.filter(p =>
+        items = items.filter(p =>
             p.registrationStatus !== 'rejected' &&
             (!category || p.category === category)
         );
 
-        const playersByGroup: { [key: string]: TournamentPlayer[] } = {};
-        players.forEach(p => {
+        const itemsByGroup: { [key: string]: any[] } = {};
+        items.forEach(p => {
             if (p.group) {
-                if (!playersByGroup[p.group]) playersByGroup[p.group] = [];
-                playersByGroup[p.group].push(p);
+                if (!itemsByGroup[p.group]) itemsByGroup[p.group] = [];
+                itemsByGroup[p.group].push(p);
             }
         });
 
         const matchesCollection = collection(db, "tournaments", tournamentId, "matches");
-        for (const [groupName, groupPlayers] of Object.entries(playersByGroup)) {
-            for (let i = 0; i < groupPlayers.length; i++) {
-                for (let j = i + 1; j < groupPlayers.length; j++) {
-                    await addDoc(matchesCollection, {
-                        player1Name: groupPlayers[i].name,
-                        player1Uid: groupPlayers[i].uid,
-                        player2Name: groupPlayers[j].name,
-                        player2Uid: groupPlayers[j].uid,
+        for (const [groupName, groupItems] of Object.entries(itemsByGroup)) {
+            for (let i = 0; i < groupItems.length; i++) {
+                for (let j = i + 1; j < groupItems.length; j++) {
+                    const matchData: any = {
                         status: 'scheduled',
                         tournamentId,
                         type: 'tournament',
                         group: groupName,
-                        category
-                    });
+                        category,
+                        sport,
+                        isDoubles: isDoubles
+                    };
+
+                    if (isDoubles) {
+                        matchData.team1Id = groupItems[i].id;
+                        matchData.team1Name = groupItems[i].teamName || `${groupItems[i].player1Name} / ${groupItems[i].player2Name}`;
+                        matchData.team1Seed = groupItems[i].seed;
+                        matchData.team2Id = groupItems[j].id;
+                        matchData.team2Name = groupItems[j].teamName || `${groupItems[j].player1Name} / ${groupItems[j].player2Name}`;
+                        matchData.team2Seed = groupItems[j].seed;
+                        // Legacy support for doubles (setting one player UID for basic listings)
+                        matchData.player1Uid = groupItems[i].player1Uid;
+                        matchData.player2Uid = groupItems[j].player1Uid;
+                    } else {
+                        matchData.player1Name = groupItems[i].name;
+                        matchData.player1Uid = groupItems[i].uid;
+                        matchData.player1Seed = groupItems[i].seed;
+                        matchData.player2Name = groupItems[j].name;
+                        matchData.player2Uid = groupItems[j].uid;
+                        matchData.player2Seed = groupItems[j].seed;
+                    }
+
+                    await addDoc(matchesCollection, matchData);
                 }
             }
         }
@@ -301,7 +368,9 @@ export const saveMatchScoreByAdmin = async (
             sets: data.sets,
             score,
             winnerId: data.winnerId,
+            ...(matchData.isDoubles && { winnerTeamId: data.winnerId }),
             isWithdrawal: !!data.isWithdrawal,
+            completedAt: Timestamp.now(),
             proposedSets: null,
             proposedScore: null,
             proposedWinnerId: null,
@@ -338,34 +407,114 @@ export const saveMatchScoreByAdmin = async (
     }
 };
 
-export const resetGroupStage = async (tournamentId: string, category?: TournamentCategory) => {
+export const resetGroupStage = async (tournamentId: string, category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles') => {
     try {
+        const isDoubles = modality === 'doubles';
         const matchesQuery = category
             ? query(collection(db, "tournaments", tournamentId, "matches"), where("category", "==", category))
             : query(collection(db, "tournaments", tournamentId, "matches"));
         const matchesSnapshot = await getDocs(matchesQuery);
-        await Promise.all(matchesSnapshot.docs.map(d => deleteDoc(d.ref)));
+        await Promise.all(matchesSnapshot.docs.filter(d => !!d.data().isDoubles === isDoubles).map(d => deleteDoc(d.ref)));
 
         const groupsQuery = category
             ? query(collection(db, "tournaments", tournamentId, "groups"), where("category", "==", category))
             : query(collection(db, "tournaments", tournamentId, "groups"));
         const groupsSnapshot = await getDocs(groupsQuery);
-        await Promise.all(groupsSnapshot.docs.map(d => deleteDoc(d.ref)));
+        await Promise.all(groupsSnapshot.docs.filter(d => !!d.data().isDoubles === isDoubles).map(d => deleteDoc(d.ref)));
 
-        const players = await getTournamentPlayers(tournamentId);
-        const filteredPlayers = category ? players.filter(p => p.category === category) : players;
         const batch = writeBatch(db);
-        filteredPlayers.forEach(p => {
-            if (p.group) batch.update(doc(db, "tournaments", tournamentId, "players", p.id), { group: null });
-        });
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            let teams = await getDoublesTeams(tournamentId);
+            if (category) teams = teams.filter(t => t.category === category);
+            teams.forEach(t => {
+                if (t.group) batch.update(doc(db, "tournaments", tournamentId, "doublesTeams", t.id), { group: null });
+            });
+        } else {
+            const players = await getTournamentPlayers(tournamentId);
+            const filteredPlayers = category ? players.filter(p => p.category === category) : players;
+            filteredPlayers.forEach(p => {
+                if (p.group) batch.update(doc(db, "tournaments", tournamentId, "players", p.id), { group: null });
+            });
+        }
         await batch.commit();
+        await removeChampion(tournamentId, modality, category);
     } catch (error) {
         console.error(error);
         throw error;
     }
 };
 
-export const simulateGroupMatchResults = async (tournamentId: string, category?: TournamentCategory) => {
+export const assignChampion = async (
+    tournamentId: string,
+    modality: 'singles' | 'doubles',
+    category: TournamentCategory,
+    winner: { uid: string; name: string },
+    loser?: { uid: string; name: string }
+) => {
+    try {
+        const tournamentRef = doc(db, 'tournaments', tournamentId);
+        const tSnap = await getDoc(tournamentRef);
+        const tData = tSnap.data();
+        const champions = tData?.champions || {};
+
+        const key = `${modality}_${category}`;
+        champions[key] = {
+            winnerUid: winner.uid,
+            winnerName: winner.name,
+            loserUid: loser?.uid || null,
+            loserName: loser?.name || null,
+            assignedAt: Timestamp.now()
+        };
+
+        await updateDoc(tournamentRef, { champions });
+
+        // Also add to User's Hall of Fame
+        if (winner.uid && !winner.uid.startsWith('manual_')) {
+            const userRef = doc(db, 'users', winner.uid);
+            await updateDoc(userRef, {
+                hallOfFame: increment(1), // Minimal for now, mobile adds full object
+            } as any);
+        }
+        return true;
+    } catch (error) {
+        console.error("Error assigning champion:", error);
+        throw error;
+    }
+};
+
+export const removeChampion = async (
+    tournamentId: string,
+    modality: 'singles' | 'doubles',
+    category?: TournamentCategory
+) => {
+    try {
+        const tournamentRef = doc(db, 'tournaments', tournamentId);
+        const tSnap = await getDoc(tournamentRef);
+        if (!tSnap.exists()) return;
+
+        const tData = tSnap.data();
+        const champions = tData?.champions || {};
+
+        if (category) {
+            const key = `${modality}_${category}`;
+            delete champions[key];
+        } else {
+            // Remove all champions for this modality
+            Object.keys(champions).forEach(key => {
+                if (key.startsWith(`${modality}_`)) {
+                    delete champions[key];
+                }
+            });
+        }
+
+        await updateDoc(tournamentRef, { champions });
+    } catch (error) {
+        console.error("Error removing champion:", error);
+    }
+};
+
+export const simulateGroupMatchResults = async (tournamentId: string, category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles') => {
     try {
         const tournament = await getTournamentById(tournamentId);
         const scoring = tournament?.scoringConfig || { win: 3, loss: 0, withdraw: 0 };
@@ -373,7 +522,7 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
 
         const matches = await getTournamentMatches(tournamentId);
         // Filter: Scheduled AND Group Stage (has group)
-        let scheduledGroupMatches = matches.filter(m => m.status === 'scheduled' && !!m.group);
+        let scheduledGroupMatches = matches.filter(m => m.status === 'scheduled' && !!m.group && (!!m.isDoubles === (modality === 'doubles')));
 
         if (category) {
             scheduledGroupMatches = scheduledGroupMatches.filter(m => m.category?.toLowerCase() === category.toLowerCase());
@@ -387,9 +536,17 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
             const matchRef = doc(db, "tournaments", tournamentId, "matches", match.id);
 
             // 1. Determine Winner
-            const winnerId = Math.random() > 0.5 ? match.player1Uid : match.player2Uid;
-            const loserId = winnerId === match.player1Uid ? match.player2Uid : match.player1Uid;
-            const isP1Winner = winnerId === match.player1Uid;
+            let winnerId = '';
+            let loserId = '';
+            let isP1Winner = Math.random() > 0.5;
+
+            if (match.isDoubles) {
+                winnerId = isP1Winner ? match.team1Id! : match.team2Id!;
+                loserId = isP1Winner ? match.team2Id! : match.team1Id!;
+            } else {
+                winnerId = isP1Winner ? match.player1Uid : match.player2Uid;
+                loserId = isP1Winner ? match.player2Uid : match.player1Uid;
+            }
 
             // 2. Generate Simulated Sets (Best of 3)
             const sets: SetScore[] = [];
@@ -432,32 +589,60 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
                 winnerId: winnerId,
                 sets: sets,
                 score: scoreString,
+                completedAt: Timestamp.now(),
                 proposedScore: null,
                 proposedWinnerId: null,
                 submittedBy: null
             });
 
-            // 4. Update Player XP & Club Points (using individual updates to handle manual players safely)
-            // Note: Batch updates would fail if a user document doesn't exist
-            if (winnerId && !winnerId.startsWith('manual_')) {
-                try {
-                    await updateDoc(doc(db, "users", winnerId), {
-                        "tennisProfile.points": increment(50),
-                        ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.win ?? 3) })
-                    });
-                } catch (e) {
-                    console.log(`Skipping points for winner ${winnerId}`);
+            // 4. Update Player XP & Club Points
+            const winners = [];
+            const losers = [];
+
+            if (match.isDoubles) {
+                // Fetch team members if we don't have them in the match object
+                const team1Doc = await getDoc(doc(db, "tournaments", tournamentId, "doublesTeams", match.team1Id!));
+                const team2Doc = await getDoc(doc(db, "tournaments", tournamentId, "doublesTeams", match.team2Id!));
+
+                if (team1Doc.exists() && team2Doc.exists()) {
+                    const t1 = team1Doc.data();
+                    const t2 = team2Doc.data();
+                    if (isP1Winner) {
+                        winners.push(t1.player1Uid, t1.player2Uid);
+                        losers.push(t2.player1Uid, t2.player2Uid);
+                    } else {
+                        winners.push(t2.player1Uid, t2.player2Uid);
+                        losers.push(t1.player1Uid, t1.player2Uid);
+                    }
+                }
+            } else {
+                winners.push(winnerId);
+                losers.push(loserId);
+            }
+
+            for (const uid of winners) {
+                if (uid && !uid.startsWith('manual_')) {
+                    try {
+                        await updateDoc(doc(db, "users", uid), {
+                            "tennisProfile.points": increment(50),
+                            ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.win ?? 3) })
+                        });
+                    } catch (e) {
+                        console.log(`Skipping points for winner ${uid}`);
+                    }
                 }
             }
 
-            if (loserId && !loserId.startsWith('manual_')) {
-                try {
-                    await updateDoc(doc(db, "users", loserId), {
-                        "tennisProfile.points": increment(-15),
-                        ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.loss ?? 0) })
-                    });
-                } catch (e) {
-                    console.log(`Skipping points for loser ${loserId}`);
+            for (const uid of losers) {
+                if (uid && !uid.startsWith('manual_')) {
+                    try {
+                        await updateDoc(doc(db, "users", uid), {
+                            "tennisProfile.points": increment(-15),
+                            ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.loss ?? 0) })
+                        });
+                    } catch (e) {
+                        console.log(`Skipping points for loser ${uid}`);
+                    }
                 }
             }
         }
@@ -504,28 +689,38 @@ export const updatePlayerInTournament = async (tournamentId: string, playerId: s
     }
 };
 
-export const deleteManualPlayers = async (tournamentId: string) => {
+export const deleteManualPlayers = async (tournamentId: string, modality: 'singles' | 'doubles' = 'singles', category?: TournamentCategory) => {
     try {
-        const playersRef = collection(db, 'tournaments', tournamentId, 'players');
-        const q = query(playersRef, where('isManual', '==', true));
+        const isDoubles = modality === 'doubles';
+        const collectionName = isDoubles ? 'doublesTeams' : 'players';
+        const itemsRef = collection(db, 'tournaments', tournamentId, collectionName);
+
+        let q = query(itemsRef, where('isManual', '==', true));
+        if (category && category !== 'all' as any) {
+            q = query(q, where('category', '==', category));
+        }
+
         const snapshot = await getDocs(q);
 
         let count = 0;
-        for (const playerDoc of snapshot.docs) {
-            // Also cleanup their matches
-            const matchesQuery = query(
-                collection(db, 'tournaments', tournamentId, 'matches'),
-                where('player1Uid', '==', playerDoc.data().uid)
-            );
-            const matches2Query = query(
-                collection(db, 'tournaments', tournamentId, 'matches'),
-                where('player2Uid', '==', playerDoc.data().uid)
-            );
+        for (const itemDoc of snapshot.docs) {
+            const data = itemDoc.data();
 
-            const [m1, m2] = await Promise.all([getDocs(matchesQuery), getDocs(matches2Query)]);
-            await Promise.all([...m1.docs, ...m2.docs].map(d => deleteDoc(d.ref)));
+            // Cleanup matches
+            const matchQueries = [];
+            if (isDoubles) {
+                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('team1Id', '==', itemDoc.id)));
+                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('team2Id', '==', itemDoc.id)));
+            } else {
+                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('player1Uid', '==', data.uid)));
+                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('player2Uid', '==', data.uid)));
+            }
 
-            await deleteDoc(playerDoc.ref);
+            const matchSnaps = await Promise.all(matchQueries.map(q => getDocs(q)));
+            const matchDocs = matchSnaps.flatMap(s => s.docs);
+
+            await Promise.all(matchDocs.map(d => deleteDoc(d.ref)));
+            await deleteDoc(itemDoc.ref);
             count++;
         }
         return count;

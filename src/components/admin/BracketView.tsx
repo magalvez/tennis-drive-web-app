@@ -62,32 +62,52 @@ const BracketView: React.FC<BracketViewProps> = ({ matches, bracketSize, onMatch
                                             }`}
                                     >
                                         <div className="flex flex-col">
-                                            {/* Player 1 */}
-                                            <div className={`flex items-center justify-between p-4 border-b border-white/5 ${match.winnerId === match.player1Uid ? 'bg-tennis-green/5' : ''}`}>
+                                            {/* Participant 1 */}
+                                            <div className={`flex items-center justify-between p-4 border-b border-white/5 ${match.isDoubles
+                                                    ? (match.winnerTeamId === match.team1Id ? 'bg-tennis-green/5' : '')
+                                                    : (match.winnerId === match.player1Uid ? 'bg-tennis-green/5' : '')
+                                                }`}>
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${match.winnerId === match.player1Uid ? 'bg-tennis-green/20 text-tennis-green' : 'bg-white/5 text-gray-500'}`}>
-                                                        <span className="text-[10px] font-black">{match.player1Seed || <User size={14} />}</span>
-                                                    </div>
-                                                    <span className={`font-bold text-sm ${match.winnerId === match.player1Uid ? 'text-tennis-green' : !match.player1Name ? 'text-gray-600 italic' : 'text-white'
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${match.isDoubles
+                                                            ? (match.winnerTeamId === match.team1Id ? 'bg-tennis-green/20 text-tennis-green' : 'bg-white/5 text-gray-500')
+                                                            : (match.winnerId === match.player1Uid ? 'bg-tennis-green/20 text-tennis-green' : 'bg-white/5 text-gray-500')
                                                         }`}>
-                                                        {match.player1Name || (match.isBye ? 'BYE' : 'TBD')}
+                                                        <span className="text-[10px] font-black">
+                                                            {match.isDoubles ? match.team1Seed : match.player1Seed || <User size={14} />}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`font-bold text-sm ${match.isDoubles
+                                                            ? (match.winnerTeamId === match.team1Id ? 'text-tennis-green' : (!match.team1Name ? 'text-gray-600 italic' : 'text-white'))
+                                                            : (match.winnerId === match.player1Uid ? 'text-tennis-green' : (!match.player1Name ? 'text-gray-600 italic' : 'text-white'))
+                                                        }`}>
+                                                        {match.isDoubles ? (match.team1Name || (match.isBye ? 'BYE' : 'TBD')) : (match.player1Name || (match.isBye ? 'BYE' : 'TBD'))}
                                                     </span>
                                                 </div>
-                                                {match.winnerId === match.player1Uid && <Check size={14} className="text-tennis-green" />}
+                                                {(match.isDoubles ? (match.winnerTeamId === match.team1Id) : (match.winnerId === match.player1Uid)) && <Check size={14} className="text-tennis-green" />}
                                             </div>
 
-                                            {/* Player 2 */}
-                                            <div className={`flex items-center justify-between p-4 ${match.winnerId === match.player2Uid ? 'bg-tennis-green/5' : ''}`}>
+                                            {/* Participant 2 */}
+                                            <div className={`flex items-center justify-between p-4 ${match.isDoubles
+                                                    ? (match.winnerTeamId === match.team2Id ? 'bg-tennis-green/5' : '')
+                                                    : (match.winnerId === match.player2Uid ? 'bg-tennis-green/5' : '')
+                                                }`}>
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${match.winnerId === match.player2Uid ? 'bg-tennis-green/20 text-tennis-green' : 'bg-white/5 text-gray-500'}`}>
-                                                        <span className="text-[10px] font-black">{match.player2Seed || <User size={14} />}</span>
-                                                    </div>
-                                                    <span className={`font-bold text-sm ${match.winnerId === match.player2Uid ? 'text-tennis-green' : !match.player2Name ? 'text-gray-600 italic' : 'text-white'
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${match.isDoubles
+                                                            ? (match.winnerTeamId === match.team2Id ? 'bg-tennis-green/20 text-tennis-green' : 'bg-white/5 text-gray-500')
+                                                            : (match.winnerId === match.player2Uid ? 'bg-tennis-green/20 text-tennis-green' : 'bg-white/5 text-gray-500')
                                                         }`}>
-                                                        {match.player2Name || (match.isBye ? 'BYE' : 'TBD')}
+                                                        <span className="text-[10px] font-black">
+                                                            {match.isDoubles ? match.team2Seed : match.player2Seed || <User size={14} />}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`font-bold text-sm ${match.isDoubles
+                                                            ? (match.winnerTeamId === match.team2Id ? 'text-tennis-green' : (!match.team2Name ? 'text-gray-600 italic' : 'text-white'))
+                                                            : (match.winnerId === match.player2Uid ? 'text-tennis-green' : (!match.player2Name ? 'text-gray-600 italic' : 'text-white'))
+                                                        }`}>
+                                                        {match.isDoubles ? (match.team2Name || (match.isBye ? 'BYE' : 'TBD')) : (match.player2Name || (match.isBye ? 'BYE' : 'TBD'))}
                                                     </span>
                                                 </div>
-                                                {match.winnerId === match.player2Uid && <Check size={14} className="text-tennis-green" />}
+                                                {(match.isDoubles ? (match.winnerTeamId === match.team2Id) : (match.winnerId === match.player2Uid)) && <Check size={14} className="text-tennis-green" />}
                                             </div>
                                         </div>
 

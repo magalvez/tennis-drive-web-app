@@ -1,6 +1,6 @@
 import {
     Activity,
-    AlertCircle,
+    Building,
     CheckCircle2,
     Clock,
     DollarSign,
@@ -8,7 +8,10 @@ import {
     Ticket,
     Trophy,
     UserPlus,
-    Users
+    Users,
+    Layers,
+    ArrowLeft,
+    Plus
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -16,9 +19,17 @@ import { useLanguage } from '../../context/LanguageContext';
 import { subscribeToRecentActivities } from '../../services/activityService';
 import { notifyPlayerApproved, notifyPlayerRejected } from '../../services/notificationService';
 import { approveRegistration, rejectRegistration, subscribeToClubPendingRegistrations } from '../../services/registrationService';
+import {
+    approveCategoryRequest,
+    type CategoryRequest,
+    rejectCategoryRequest,
+    subscribeToPendingRequests
+} from '../../services/profileRequestService';
 import { getTournamentMatches, getTournamentsByClub } from '../../services/tournamentService';
 import type { TournamentData, TournamentPlayer } from '../../services/types';
 import { getClubPlayers } from '../../services/userService';
+import { getClubDoublesTeamsCount } from '../../services/doublesTeamService';
+import { getClubById } from '../../services/clubService';
 
 interface PendingRegistration {
     tournamentId: string;
@@ -44,11 +55,15 @@ const DashboardPage = () => {
     const [tournaments, setTournaments] = useState<TournamentData[]>([]);
     const [playersCount, setPlayersCount] = useState(0);
     const [matchesCount, setMatchesCount] = useState(0);
+    const [teamsCount, setTeamsCount] = useState(0);
+    const [clubName, setClubName] = useState('');
     const [pendingRegs, setPendingRegs] = useState<PendingRegistration[]>([]);
+    const [pendingCategoryRequests, setPendingCategoryRequests] = useState<CategoryRequest[]>([]);
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [rejectModal, setRejectModal] = useState<{ show: boolean, reg: PendingRegistration | null }>({ show: false, reg: null });
+    const [rejectCatModal, setRejectCatModal] = useState<{ show: boolean, req: CategoryRequest | null }>({ show: false, req: null });
     const [rejectReason, setRejectReason] = useState('');
 
 
@@ -59,12 +74,16 @@ const DashboardPage = () => {
         // One-time load for stats and tournaments list
         const loadInitial = async () => {
             try {
-                const [tData, pData] = await Promise.all([
+                const [tData, pData, tCount, cData] = await Promise.all([
                     getTournamentsByClub(managedClubId),
-                    getClubPlayers(managedClubId)
+                    getClubPlayers(managedClubId),
+                    getClubDoublesTeamsCount(managedClubId),
+                    getClubById(managedClubId)
                 ]);
                 setTournaments(tData);
                 setPlayersCount(pData.length);
+                setTeamsCount(tCount);
+                if (cData) setClubName(cData.name);
 
                 let mCount = 0;
                 for (const t of tData) {
@@ -91,9 +110,14 @@ const DashboardPage = () => {
             setRecentActivities(activities);
         });
 
+        const unsubCatRequests = subscribeToPendingRequests(managedClubId, (reqs) => {
+            setPendingCategoryRequests(reqs);
+        });
+
         return () => {
             unsubRegs();
             unsubActivity();
+            unsubCatRequests();
         };
     }, [managedClubId]);
 
@@ -137,6 +161,45 @@ const DashboardPage = () => {
         }
     };
 
+    const handleApproveCategory = async (req: CategoryRequest) => {
+        if (!user?.uid) return;
+        setProcessing(true);
+        try {
+            await approveCategoryRequest(req, user.uid);
+            const title = t('admin.notifications.automated.approved.title');
+            const body = t('admin.notifications.automated.approved.bodyCategory', {
+                category: t(`admin.tournaments.categories.${req.requestedCategory.toLowerCase()}`)
+            });
+            await notifyPlayerApproved(req.userId, title, body);
+        } catch (error) {
+            console.error(error);
+            alert("Error approving category request");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleRejectCategory = async () => {
+        if (!user?.uid || !rejectCatModal.req || !rejectReason) return;
+        setProcessing(true);
+        try {
+            await rejectCategoryRequest(rejectCatModal.req.id, user.uid, rejectReason);
+            const title = t('admin.notifications.automated.rejected.title');
+            const body = t('admin.notifications.automated.rejected.bodyCategory', {
+                category: t(`admin.tournaments.categories.${rejectCatModal.req.requestedCategory.toLowerCase()}`),
+                reason: rejectReason
+            });
+            await notifyPlayerRejected(rejectCatModal.req.userId, title, body);
+            setRejectCatModal({ show: false, req: null });
+            setRejectReason('');
+        } catch (error) {
+            console.error(error);
+            alert("Error rejecting category request");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     const getActivityColor = (type: string) => {
         switch (type) {
             case 'user_register': return 'blue';
@@ -169,16 +232,75 @@ const DashboardPage = () => {
 
     return (
         <div className="space-y-10 animate-fade-in">
-            <div>
-                <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">{t('adminTabs.dashboard')}</h1>
-                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{t('dashboard.performanceOverview')}</p>
+            <div className="flex justify-between items-end">
+                <div>
+                    <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">{t('adminTabs.dashboard')}</h1>
+                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{t('dashboard.performanceOverview')}</p>
+                </div>
+
+                {clubName && (
+                    <div className="flex items-center gap-3 bg-white/5 border border-white/5 px-6 py-3 rounded-2xl animate-fade-in mb-1">
+                        <div className="w-8 h-8 rounded-xl bg-tennis-green/10 flex items-center justify-center text-tennis-green">
+                            <Building size={16} />
+                        </div>
+                        <span className="text-white font-black uppercase tracking-widest text-[11px]">{clubName}</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Quick Actions Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <a href="/admin/tournaments/create" className="glass p-6 rounded-[32px] border-white/5 hover:bg-white/[0.05] transition-all group">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-2xl bg-tennis-green/10 flex items-center justify-center text-tennis-green">
+                            <Plus size={20} />
+                        </div>
+                        <div>
+                            <p className="text-white font-bold text-sm group-hover:text-tennis-green transition-colors">{t('admin.actions.create')}</p>
+                            <p className="text-gray-500 text-[10px] font-medium mt-0.5">{t('admin.actions.createDesc')}</p>
+                        </div>
+                    </div>
+                </a>
+                <a href="/admin/tournaments" className="glass p-6 rounded-[32px] border-white/5 hover:bg-white/[0.05] transition-all group">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                            <Clock size={20} />
+                        </div>
+                        <div>
+                            <p className="text-white font-bold text-sm group-hover:text-blue-400 transition-colors">{t('admin.actions.schedule')}</p>
+                            <p className="text-gray-500 text-[10px] font-medium mt-0.5">{t('admin.actions.scheduleDesc')}</p>
+                        </div>
+                    </div>
+                </a>
+                <a href="/admin/notifications" className="glass p-6 rounded-[32px] border-white/5 hover:bg-white/[0.05] transition-all group">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-2xl bg-yellow-500/10 flex items-center justify-center text-yellow-500">
+                            <Activity size={20} />
+                        </div>
+                        <div>
+                            <p className="text-white font-bold text-sm group-hover:text-yellow-500 transition-colors">{t('admin.actions.alerts')}</p>
+                            <p className="text-gray-500 text-[10px] font-medium mt-0.5">{t('admin.actions.alertsDesc')}</p>
+                        </div>
+                    </div>
+                </a>
+                <a href="/admin/payments" className="glass p-6 rounded-[32px] border-white/5 hover:bg-white/[0.05] transition-all group">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-400">
+                            <DollarSign size={20} />
+                        </div>
+                        <div>
+                            <p className="text-white font-bold text-sm group-hover:text-orange-400 transition-colors">{t('admin.actions.payments')}</p>
+                            <p className="text-gray-500 text-[10px] font-medium mt-0.5">{t('admin.actions.paymentsDesc', { count: pendingRegs.length })}</p>
+                        </div>
+                    </div>
+                </a>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     icon={<Trophy size={24} />}
                     label={t('dashboard.stats.tournaments')}
-                    value={tournaments.length}
+                    value={tournaments.filter(t => t.status === 'upcoming' || t.status === 'active').length}
                     color="tennis-green"
                 />
                 <StatCard
@@ -194,9 +316,9 @@ const DashboardPage = () => {
                     color="purple"
                 />
                 <StatCard
-                    icon={<AlertCircle size={24} />}
-                    label={t('dashboard.activeEvents')}
-                    value={tournaments.filter(t => t.status === 'active').length}
+                    icon={<Layers size={24} />}
+                    label={t('dashboard.stats.teams')}
+                    value={teamsCount}
                     color="yellow"
                 />
             </div>
@@ -268,6 +390,59 @@ const DashboardPage = () => {
                     )}
                 </div>
 
+                {/* Pending Category Requests */}
+                {pendingCategoryRequests.length > 0 && (
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-white text-xl font-bold uppercase tracking-tight">
+                                {t('dashboard.categoryRequests')} ({pendingCategoryRequests.length})
+                            </h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {pendingCategoryRequests.map(req => (
+                                <div key={req.id} className="glass p-8 rounded-[32px] border-white/5 space-y-6 transition-all hover:bg-white/[0.02]">
+                                    <div className="flex justify-between items-start">
+                                        <div className="space-y-1">
+                                            <h3 className="text-white text-2xl font-black tracking-tight leading-tight">{req.userName}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">{t(`admin.tournaments.categories.${req.currentCategory.toLowerCase()}`)}</span>
+                                                <ArrowLeft size={12} className="text-gray-700 rotate-180" />
+                                                <span className="text-tennis-green text-[10px] font-black uppercase tracking-widest">{t(`admin.tournaments.categories.${req.requestedCategory.toLowerCase()}`)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-gray-500">
+                                            <Users size={24} />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                                        <p className="text-gray-500 text-[8px] font-black uppercase tracking-widest mb-1">{t('admin.tournaments.reason')}</p>
+                                        <p className="text-gray-300 text-xs italic font-medium leading-relaxed">"{req.reason}"</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 pt-2">
+                                        <button
+                                            onClick={() => handleApproveCategory(req)}
+                                            disabled={processing}
+                                            className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark h-12 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            {t('common.approve')}
+                                        </button>
+                                        <button
+                                            onClick={() => setRejectCatModal({ show: true, req })}
+                                            disabled={processing}
+                                            className="bg-white/5 hover:bg-red-500/10 hover:text-red-500 border border-white/10 h-12 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            {t('common.reject')}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Recent Activity */}
                 <div className="space-y-6">
                     <h2 className="text-white text-xl font-bold uppercase tracking-tight">{t('dashboard.recentActivity')}</h2>
@@ -291,7 +466,7 @@ const DashboardPage = () => {
                                                                 typeColor === 'orange' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/20' :
                                                                     'bg-white/10 text-white'
                                             }
-                                        `}>
+`}>
                                             {getActivityIcon(activity.type)}
                                         </div>
 
@@ -355,6 +530,49 @@ const DashboardPage = () => {
                             </button>
                             <button
                                 onClick={handleReject}
+                                disabled={processing || !rejectReason.trim()}
+                                className="bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
+                            >
+                                {t('common.reject')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Rejection Modal for Category Requests */}
+            {rejectCatModal.show && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="glass w-full max-w-lg rounded-[40px] p-10 border-white/10 space-y-8 animate-scale-in">
+                        <div className="space-y-2">
+                            <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('common.reject')}</h2>
+                            <p className="text-gray-400 font-medium">
+                                {rejectCatModal.req?.userName} — <span className="text-tennis-green">{t(`admin.tournaments.categories.${rejectCatModal.req?.requestedCategory.toLowerCase()}`)}</span>
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <textarea
+                                className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 text-white placeholder:text-gray-600 focus:outline-none focus:border-red-500/30 transition-all min-h-[120px] resize-none"
+                                placeholder={t('admin.tournaments.rejectReasonPh')}
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={() => {
+                                    setRejectCatModal({ show: false, req: null });
+                                    setRejectReason('');
+                                }}
+                                className="bg-white/5 hover:bg-white/10 text-gray-400 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={handleRejectCategory}
                                 disabled={processing || !rejectReason.trim()}
                                 className="bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
                             >

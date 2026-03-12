@@ -1,4 +1,4 @@
-import { addDoc, collection, getDocs, query, Timestamp, where } from 'firebase/firestore';
+import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import {
     ArrowLeft,
     Check,
@@ -9,23 +9,23 @@ import {
     RefreshCw,
     ShieldAlert,
     Trash2,
-    UserPlus,
     Users,
     X,
-    AlertTriangle
+    AlertTriangle,
+    Banknote,
+    Building2
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../../config/firebase';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
-import { notifyPlayerApproved, notifyPlayerRejected } from '../../../services/notificationService';
-import { completeTransaction, createTransaction, revertLatestTransactionForUser } from '../../../services/paymentService';
-import { approveRegistration, getPendingRegistrations, rejectRegistration } from '../../../services/registrationService';
+import { notifyPlayerApproved } from '../../../services/notificationService';
+import { completeTransaction, createTransaction } from '../../../services/paymentService';
+import { approveRegistration, getPendingRegistrations, rejectRegistration, subscribeToTournamentPendingRegistrations } from '../../../services/registrationService';
 import {
     addPlayerToTournament,
     autoSeedPlayers,
-    CATEGORY_ORDER,
     checkInPlayer,
     deleteManualPlayers,
     getTournamentById,
@@ -34,7 +34,24 @@ import {
     updatePlayerInTournament,
     updatePlayerSeed
 } from '../../../services/tournamentService';
+import {
+    getDoublesTeams,
+    createDoublesTeam,
+    removeDoublesTeam,
+    updateDoublesTeamSeed,
+    updateDoublesTeam,
+    checkInDoublesPlayer,
+    rejectDoublesTeamRegistration,
+    autoSeedDoublesTeams
+} from '../../../services/doublesTeamService';
+import {
+    getPendingRequestsForTournament,
+    acceptDoublesRequest,
+    rejectDoublesRequest
+} from '../../../services/doublesRequestService';
+import type { DoublesRequest } from '../../../services/doublesRequestService';
 import type { TournamentCategory, TournamentData, TournamentPlayer } from '../../../services/types';
+import type { DoublesTeam } from '../../../services/doublesTeamService';
 import PlayerStatsModal from '../../../components/admin/PlayerStatsModal';
 
 const TournamentPlayersPage = () => {
@@ -45,28 +62,31 @@ const TournamentPlayersPage = () => {
 
     const [tournament, setTournament] = useState<TournamentData | null>(null);
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
-    const [playerPoints, setPlayerPoints] = useState<{ [uid: string]: number }>({});
     const [pendingRegs, setPendingRegs] = useState<TournamentPlayer[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
-    const [selectedCategory, setSelectedCategory] = useState<TournamentCategory | 'all'>('all');
+    const [selectedCategory, setSelectedCategory] = useState<TournamentCategory | ''>('');
+
+    const [selectedModality, setSelectedModality] = useState<'singles' | 'doubles' | 'requests'>('singles');
+    const [doublesTeams, setDoublesTeams] = useState<DoublesTeam[]>([]);
+    const [doublesRequests, setDoublesRequests] = useState<DoublesRequest[]>([]);
 
     // Modals
     const [showAddModal, setShowAddModal] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showRandomModal, setShowRandomModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
+    const [showSeedModal, setShowSeedModal] = useState(false);
+    const [showStatsModal, setShowStatsModal] = useState(false);
 
     // Form States
-    const [newPlayer, setNewPlayer] = useState({ name: '', email: '', isWildcard: false });
+    const [newPlayer, setNewPlayer] = useState({ name: '', player2Name: '', email: '', isWildcard: false });
     const [paymentInfo, setPaymentInfo] = useState({ amount: '50', note: '' });
     const [selectedPlayer, setSelectedPlayer] = useState<TournamentPlayer | null>(null);
+    const [selectedTeam, setSelectedTeam] = useState<DoublesTeam | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [randomCount, setRandomCount] = useState('5');
-    const [randomCategory, setRandomCategory] = useState<TournamentCategory | null>(null);
-    const [showSeedModal, setShowSeedModal] = useState(false);
     const [seedValue, setSeedValue] = useState('');
-    const [showStatsModal, setShowStatsModal] = useState(false);
 
     // Generic Modal States
     const [confirmModal, setConfirmModal] = useState<{
@@ -74,7 +94,7 @@ const TournamentPlayersPage = () => {
         title: string;
         message: string;
         onConfirm: () => Promise<void>;
-        type: 'danger' | 'warning' | 'info';
+        type: 'danger' | 'warning' | 'info' | 'success';
     }>({ open: false, title: '', message: '', onConfirm: async () => { }, type: 'danger' });
 
     const [errorModal, setErrorModal] = useState<{
@@ -86,7 +106,7 @@ const TournamentPlayersPage = () => {
         setErrorModal({ open: true, message: msg });
     };
 
-    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' = 'danger') => {
+    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' | 'success' = 'danger') => {
         setConfirmModal({
             open: true,
             title,
@@ -109,315 +129,469 @@ const TournamentPlayersPage = () => {
             setPlayers(pData);
             setPendingRegs(rData);
 
-            // Fetch points from club
-            if (tData?.clubId) {
-                const { doc, getDoc } = await import('firebase/firestore');
-                const pointsMap: { [uid: string]: number } = {};
+            if (tData) {
+                const hasDoubles = tData.modalities?.doubles || tData.modalityConfig?.doubles;
+                if (hasDoubles) {
+                    const [dTeams, dReqs] = await Promise.all([
+                        getDoublesTeams(id),
+                        getPendingRequestsForTournament(id)
+                    ]);
+                    setDoublesTeams(dTeams);
+                    setDoublesRequests(dReqs);
+                }
 
-                await Promise.all(pData.map(async (p) => {
-                    if (p.uid && !p.isManual) {
-                        try {
-                            const userDoc = await getDoc(doc(db, 'users', p.uid));
-                            if (userDoc.exists()) {
-                                const userData = userDoc.data();
-                                pointsMap[p.uid] = userData.clubs?.[tData.clubId!]?.points ?? 0;
-                            }
-                        } catch (e) {
-                            console.warn(`Points fetch error for ${p.uid}`, e);
-                        }
+                // Auto-select modality if only one is available
+                if (tData.modalityConfig) {
+                    if (tData.modalityConfig.singles && !tData.modalityConfig.doubles) {
+                        setSelectedModality('singles');
+                    } else if (!tData.modalityConfig.singles && tData.modalityConfig.doubles) {
+                        setSelectedModality('doubles');
                     }
-                }));
-                setPlayerPoints(pointsMap);
+                } else if (tData.modalities) {
+                    if (tData.modalities.singles && !tData.modalities.doubles) {
+                        setSelectedModality('singles');
+                    } else if (!tData.modalities.singles && tData.modalities.doubles) {
+                        setSelectedModality('doubles');
+                    }
+                }
+
+                // Auto-select first category if none selected or if selected is 'all'
+                const availableCats = [...((tData.categories || tData.modalityConfig?.[selectedModality === 'requests' ? 'doubles' : selectedModality]?.categories) || [])].sort((a, b) => {
+                    const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
+                    const idxA = order.indexOf(a.toUpperCase());
+                    const idxB = order.indexOf(b.toUpperCase());
+                    return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+                });
+
+                if (availableCats.length > 0 && !selectedCategory) {
+                    setSelectedCategory(availableCats[0] as TournamentCategory);
+                }
             }
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [id, selectedModality, selectedCategory]);
 
     useEffect(() => {
         loadData();
     }, [loadData]);
 
+    useEffect(() => {
+        if (!id) return;
+        const unsubscribe = subscribeToTournamentPendingRegistrations(id, (regs) => {
+            setPendingRegs(regs);
+        });
+        return () => unsubscribe();
+    }, [id]);
+
     const handleAddPlayer = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!id || !newPlayer.name.trim() || processing) return;
+
         setProcessing(true);
         try {
-            let userUid = `manual_${Date.now()}`;
-            // Optional: Lookup user by email
-            if (newPlayer.email.trim()) {
-                const q = query(collection(db, 'users'), where('email', '==', newPlayer.email.trim()));
-                const snap = await getDocs(q);
-                if (!snap.empty) {
-                    userUid = snap.docs[0].id;
+            const tournamentSport = tournament?.sport || 'tennis';
+            const cat = selectedCategory as TournamentCategory;
+
+            let sportsProfiles: any = {};
+            if (cat) {
+                if (tournamentSport === 'tennis') {
+                    const { CATEGORY_NTRP_MAP } = await import('../../../services/profileRequestService');
+                    const { calculateNtrpPoints } = await import('../../../services/ntrpService');
+                    sportsProfiles.tennis = {
+                        category: cat,
+                        ntrp: CATEGORY_NTRP_MAP[cat.toLowerCase()] || 'Beginner (1.0 - 2.5)',
+                        ntrp_points: calculateNtrpPoints(cat, 0),
+                        points: 0
+                    };
                 } else {
-                    const userRef = await addDoc(collection(db, 'users'), {
-                        displayName: newPlayer.name,
-                        email: newPlayer.email.trim(),
-                        createdAt: Timestamp.now(),
-                        isManual: true,
-                        role: 'player'
-                    });
-                    userUid = userRef.id;
+                    sportsProfiles[tournamentSport] = {
+                        category: cat,
+                        points: 0
+                    };
                 }
             }
 
-            await addPlayerToTournament(id, {
-                name: newPlayer.name,
-                email: newPlayer.email,
-                uid: userUid,
-                isWildcard: newPlayer.isWildcard,
-                isManual: true,
-                registrationStatus: 'approved'
-            });
+            if (selectedModality === 'doubles') {
+                if (!newPlayer.player2Name.trim()) return;
+
+                const user1Ref = await addDoc(collection(db, 'users'), {
+                    displayName: newPlayer.name.trim(),
+                    createdAt: Timestamp.now(),
+                    isManual: true,
+                    role: 'player',
+                    sportsProfiles
+                });
+                const user2Ref = await addDoc(collection(db, 'users'), {
+                    displayName: newPlayer.player2Name.trim(),
+                    createdAt: Timestamp.now(),
+                    isManual: true,
+                    role: 'player',
+                    sportsProfiles
+                });
+
+                await createDoublesTeam(id, {
+                    player1Uid: user1Ref.id,
+                    player1Name: newPlayer.name.trim(),
+                    player2Uid: user2Ref.id,
+                    player2Name: newPlayer.player2Name.trim(),
+                    category: cat,
+                    status: 'approved',
+                    paymentStatus: 'paid',
+                    paidAt: Timestamp.now() as any,
+                    isManual: true,
+                    isWildcard: newPlayer.isWildcard,
+                    addedAt: Timestamp.now()
+                } as any);
+            } else {
+                const userRef = await addDoc(collection(db, 'users'), {
+                    displayName: newPlayer.name.trim(),
+                    createdAt: Timestamp.now(),
+                    isManual: true,
+                    role: 'player',
+                    sportsProfiles
+                });
+
+                await addPlayerToTournament(id, {
+                    name: newPlayer.name.trim(),
+                    uid: userRef.id,
+                    isWildcard: newPlayer.isWildcard,
+                    category: cat,
+                    registrationStatus: 'approved'
+                });
+            }
 
             setShowAddModal(false);
-            setNewPlayer({ name: '', email: '', isWildcard: false });
+            setNewPlayer({ name: '', player2Name: '', email: '', isWildcard: false });
             await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successAdd'), async () => { }, 'success');
         } catch (error) {
-            showError(t('admin.tournaments.errorAddingPlayer'));
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    const handleRemovePlayer = (playerId: string) => {
-        showConfirmation(
-            t('admin.tournaments.removePlayer'),
-            t('admin.tournaments.confirmRemovePlayer'),
-            async () => {
-                try {
-                    setProcessing(true);
-                    await removePlayerFromTournament(id!, playerId);
-                    await loadData();
-                } catch (error) {
-                    showError(t('admin.tournaments.errorRemovingPlayer'));
-                } finally {
-                    setProcessing(false);
-                    setConfirmModal(prev => ({ ...prev, open: false }));
-                }
-            },
-            'danger'
-        );
-    };
-
-    const handleApprove = async (player: TournamentPlayer) => {
-        if (!id || !user?.uid) return;
-        try {
-            await approveRegistration(id, player.id, user.uid);
-            const title = t('admin.notifications.automated.approved.title');
-            const body = t('admin.notifications.automated.approved.body', {
-                tournament: tournament?.name || '',
-                category: player.category ? t(`admin.tournaments.categories.${player.category}`) : t('common.none')
-            });
-            await notifyPlayerApproved(player.uid, title, body);
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorApprovingRegistration'));
-        }
-    };
-
-    const handleReject = async () => {
-        if (!id || !selectedPlayer || !user?.uid || !rejectReason.trim()) return;
-        setProcessing(true);
-        try {
-            await rejectRegistration(id, selectedPlayer.id, user.uid, rejectReason);
-            const title = t('admin.notifications.automated.rejected.title');
-            const body = t('admin.notifications.automated.rejected.body', {
-                tournament: tournament?.name || '',
-                reason: rejectReason
-            });
-            await notifyPlayerRejected(selectedPlayer.uid, title, body);
-            setShowRejectModal(false);
-            setRejectReason('');
-            setSelectedPlayer(null);
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorRejectingRegistration'));
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    const handlePayment = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!id || !selectedPlayer || processing) return;
-        setProcessing(true);
-        try {
-            const amount = parseFloat(paymentInfo.amount);
-            const txId = await createTransaction({
-                userId: selectedPlayer.uid || 'guest',
-                userName: selectedPlayer.name,
-                amount,
-                type: 'entry_fee',
-                referenceId: id,
-                referenceName: (tournament?.name || 'Tournament') + ' Entry',
-                tournamentPlayerId: selectedPlayer.id,
-                clubId: tournament?.clubId
-            });
-            await completeTransaction(txId, 'manual_admin', paymentInfo.note || 'manual');
-            setShowPaymentModal(false);
-            setPaymentInfo({ amount: '50', note: '' });
-            setSelectedPlayer(null);
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorRecordingPayment'));
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    const handleRevertPayment = (player: TournamentPlayer) => {
-        showConfirmation(
-            t('admin.tournaments.revertPayment'),
-            t('admin.tournaments.confirmRevertPayment', { name: player.name }),
-            async () => {
-                if (!id) return;
-                try {
-                    setProcessing(true);
-                    await revertLatestTransactionForUser(id, player.uid, player.id);
-                    await loadData();
-                } catch (error) {
-                    showError(t('admin.tournaments.errorRevertingPayment'));
-                } finally {
-                    setProcessing(false);
-                    setConfirmModal(prev => ({ ...prev, open: false }));
-                }
-            },
-            'warning'
-        );
-    };
-
-    const handleToggleWildcard = async (player: TournamentPlayer) => {
-        if (!id) return;
-        try {
-            await updatePlayerInTournament(id, player.id, { isWildcard: !player.isWildcard });
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorUpdatingWildcard'));
-        }
-    };
-
-    const handleUpdateSeed = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!id || !selectedPlayer || processing) return;
-        setProcessing(true);
-        try {
-            const seed = seedValue === '' ? null : parseInt(seedValue);
-            await updatePlayerSeed(id, selectedPlayer.id, seed);
-            setShowSeedModal(false);
-            setSeedValue('');
-            setSelectedPlayer(null);
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorUpdatingSeed'));
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    const handleToggleCheckIn = async (player: TournamentPlayer) => {
-        if (!id || processing) return;
-        setProcessing(true);
-        try {
-            const newValue = !player.isCheckedIn;
-            await checkInPlayer(id, player.id, player.uid, newValue);
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorCheckIn') || "Error during check-in");
-        } finally {
-            setProcessing(false);
-        }
-    };
-    const handleAutoSeed = async () => {
-        if (!id || processing) return;
-        setProcessing(true);
-        try {
-            const cat = selectedCategory === 'all' ? undefined : selectedCategory;
-            await autoSeedPlayers(id, cat);
-            setShowRandomModal(false);
-            await loadData();
-        } catch (error) {
-            showError(t('admin.tournaments.errorAutoSeeding'));
+            console.error(error);
+            showError("Failed to add player");
         } finally {
             setProcessing(false);
         }
     };
 
     const handleGenerateRandom = async () => {
-        if (!id || processing) return;
+        const catToUse = selectedCategory as TournamentCategory;
+        if (!id || processing || !catToUse) return;
         setProcessing(true);
         try {
             const count = parseInt(randomCount);
+            const tournamentSport = tournament?.sport || 'tennis';
+            const { CATEGORY_NTRP_MAP } = await import('../../../services/profileRequestService');
+            const { calculateNtrpPoints } = await import('../../../services/ntrpService');
+
+            const promises = [];
             for (let i = 0; i < count; i++) {
-                const rnd = Math.floor(Math.random() * 10000);
-                const fakeName = `Test Player ${rnd}`;
-                const userRef = await addDoc(collection(db, 'users'), {
-                    displayName: fakeName,
-                    email: `test_${Date.now()}_${rnd}@test.com`,
-                    createdAt: Timestamp.now(),
-                    isManual: true,
-                    role: 'player'
-                });
-                await addPlayerToTournament(id, {
-                    name: fakeName,
-                    uid: userRef.id,
-                    isWildcard: false,
-                    isManual: true,
-                    category: randomCategory || undefined
-                });
+                promises.push((async () => {
+                    const rnd = Math.floor(Math.random() * 9000) + 1000;
+                    let sportsProfiles: any = {};
+                    if (tournamentSport === 'tennis') {
+                        sportsProfiles.tennis = {
+                            category: catToUse,
+                            ntrp: CATEGORY_NTRP_MAP[catToUse.toLowerCase()] || 'Beginner (1.0 - 2.5)',
+                            ntrp_points: calculateNtrpPoints(catToUse, 0),
+                            points: 0
+                        };
+                    } else {
+                        sportsProfiles[tournamentSport] = {
+                            category: catToUse,
+                            points: 0
+                        };
+                    }
+
+                    if (selectedModality === 'doubles') {
+                        const p1Name = `Rnd ${rnd} A`;
+                        const p2Name = `Rnd ${rnd} B`;
+                        const u1 = await addDoc(collection(db, 'users'), { displayName: p1Name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
+                        const u2 = await addDoc(collection(db, 'users'), { displayName: p2Name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
+                        await createDoublesTeam(id, {
+                            player1Uid: u1.id, player1Name: p1Name,
+                            player2Uid: u2.id, player2Name: p2Name,
+                            category: catToUse, status: 'approved', paymentStatus: 'paid', isManual: true, addedAt: Timestamp.now()
+                        } as any);
+                    } else {
+                        const name = `Test Player ${rnd}`;
+                        const u = await addDoc(collection(db, 'users'), { displayName: name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
+                        await addPlayerToTournament(id, { name, uid: u.id, category: catToUse, registrationStatus: 'approved' });
+                    }
+                })());
             }
-            setShowRandomModal(false);
+
+            await Promise.all(promises);
             await loadData();
+            setShowRandomModal(false);
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successGenerate'), async () => { }, 'success');
         } catch (error) {
-            showError(t('admin.tournaments.errorGeneratingPlayers'));
+            console.error(error);
+            showError("Failed to generate test players");
         } finally {
             setProcessing(false);
         }
     };
 
-    const handleCleanup = () => {
+    const handleRemove = async (item: TournamentPlayer | DoublesTeam) => {
+        if (!id) return;
         showConfirmation(
-            t('admin.tournaments.deleteAllPlayers'),
-            t('admin.tournaments.confirmDeleteAllTestData'),
+            t('admin.tournaments.removePlayer'),
+            t('admin.tournaments.removePlayerConfirm'),
             async () => {
-                if (!id) return;
                 setProcessing(true);
                 try {
-                    await deleteManualPlayers(id);
+                    if ('player1Uid' in item) {
+                        await removeDoublesTeam(id, (item as DoublesTeam).id);
+                    } else {
+                        await removePlayerFromTournament(id, (item as TournamentPlayer).id);
+                    }
                     await loadData();
+                    showConfirmation(t('common.success'), t('admin.tournaments.players.successRemove'), async () => { }, 'success');
                 } catch (error) {
-                    showError(t('admin.tournaments.errorCleanup'));
+                    console.error(error);
+                    showError("Failed to remove player/team");
                 } finally {
                     setProcessing(false);
-                    setConfirmModal(prev => ({ ...prev, open: false }));
+                }
+            }
+        );
+    };
+
+    const handleToggleCheckIn = async (item: TournamentPlayer | DoublesTeam) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            if ('player1Uid' in item) {
+                const team = item as DoublesTeam;
+                const newValue = !team.player1CheckedIn;
+                await checkInDoublesPlayer(id, team.id, team.player1Uid, newValue);
+                if (team.player2Uid) await checkInDoublesPlayer(id, team.id, team.player2Uid, newValue);
+            } else {
+                const player = item as TournamentPlayer;
+                await checkInPlayer(id, player.id, player.uid, !player.isCheckedIn);
+            }
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successUpdate'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to update check-in");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleToggleWildcard = async (item: TournamentPlayer | DoublesTeam) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            const updates = { isWildcard: !item.isWildcard };
+            if ('player1Uid' in item) {
+                await updateDoublesTeam(id, item.id, updates);
+            } else {
+                await updatePlayerInTournament(id, item.id, updates);
+            }
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successUpdate'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to update wildcard");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleUpdateSeed = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || processing) return;
+        const val = seedValue.trim() === '' ? null : parseInt(seedValue);
+        setProcessing(true);
+        try {
+            if (selectedModality === 'doubles' && selectedTeam) {
+                await updateDoublesTeamSeed(id, selectedTeam.id, val);
+            } else if (selectedPlayer) {
+                await updatePlayerSeed(id, selectedPlayer.id, val);
+            }
+            setShowSeedModal(false);
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successUpdate'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to update seed");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleAutoSeed = async () => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            const cat = selectedCategory as TournamentCategory;
+            if (selectedModality === 'doubles') {
+                await autoSeedDoublesTeams(id, cat);
+            } else {
+                await autoSeedPlayers(id, cat);
+            }
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successAutoSeed'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to auto-seed");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleRecordPayment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || (!selectedPlayer && !selectedTeam) || processing) return;
+        setProcessing(true);
+        try {
+            const isDoubles = selectedModality === 'doubles';
+            const item = isDoubles ? selectedTeam! : selectedPlayer!;
+            const txId = await createTransaction({
+                userId: isDoubles ? (item as DoublesTeam).player1Uid : (item as TournamentPlayer).uid || 'guest',
+                userName: isDoubles ? ((item as DoublesTeam).teamName || `${(item as DoublesTeam).player1Name} / ${(item as DoublesTeam).player2Name}`) : (item as TournamentPlayer).name,
+                amount: parseFloat(paymentInfo.amount),
+                type: 'entry_fee',
+                referenceId: id,
+                referenceName: (tournament?.name || '') + ' Entry',
+                category: item.category || null,
+                modality: isDoubles ? 'doubles' : 'singles',
+                doublesTeamId: isDoubles ? item.id : null,
+                tournamentPlayerId: isDoubles ? null : (item as TournamentPlayer).id,
+                clubId: tournament?.clubId
+            } as any);
+            await completeTransaction(txId, 'manual_admin', 'manual', { note: paymentInfo.note });
+            setShowPaymentModal(false);
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successRecord'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to record payment");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleAcceptRequest = async (request: DoublesRequest) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            await acceptDoublesRequest(id, request.id!);
+            loadData();
+        } catch (error) {
+            console.error(error);
+            showError("Failed to accept request");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleRejectRequest = async (request: DoublesRequest) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            await rejectDoublesRequest(id, request.id!);
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successUpdate'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to reject request");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleApproveRegistration = async (playerId: string) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            await approveRegistration(id, playerId, user?.uid || 'system');
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successUpdate'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to approve registration");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleApprovePayment = async (team: DoublesTeam) => {
+        if (!id || processing) return;
+        setProcessing(true);
+        try {
+            await updateDoublesTeam(id, team.id, { paymentStatus: 'paid', status: 'approved', paidAt: Timestamp.now() as any });
+            await notifyPlayerApproved(team.player1Uid, tournament?.name || '', id);
+            if (team.player2Uid) await notifyPlayerApproved(team.player2Uid, tournament?.name || '', id);
+            await loadData();
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successUpdate'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to approve payment");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleRejectRegistration = async () => {
+        if (!id || (!selectedPlayer && !selectedTeam) || !rejectReason.trim() || processing) return;
+        setProcessing(true);
+        try {
+            if (selectedModality === 'doubles' && selectedTeam) {
+                await rejectDoublesTeamRegistration(id, selectedTeam.id, rejectReason);
+            } else if (selectedPlayer) {
+                await rejectRegistration(id, selectedPlayer.id, user?.uid || 'system', rejectReason);
+            }
+            setShowRejectModal(false);
+            setRejectReason('');
+            loadData();
+        } catch (error) {
+            console.error(error);
+            showError("Failed to reject registration");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleCleanup = async () => {
+        if (!id || processing) return;
+
+        const categoryLabel = selectedCategory ? t(`admin.tournaments.categories.${(selectedCategory as string).toLowerCase()}`) : '---';
+
+        showConfirmation(
+            t('common.attention'),
+            t('admin.tournaments.players.cleanupConfirm', {
+                modality: selectedModality === 'doubles' ? t('admin.tournaments.modalities.doubles') : t('admin.tournaments.modalities.singles'),
+                category: categoryLabel
+            }),
+            async () => {
+                setProcessing(true);
+                try {
+                    await deleteManualPlayers(id, selectedModality === 'doubles' ? 'doubles' : 'singles', selectedCategory as TournamentCategory);
+                    await loadData();
+                    showConfirmation(t('common.success'), t('admin.tournaments.players.successDelete'), async () => { }, 'success');
+                } catch (error) {
+                    console.error(error);
+                    showError("Failed to cleanup players");
+                } finally {
+                    setProcessing(false);
                 }
             },
             'danger'
         );
     };
 
-    const filteredPlayers = players
-        .filter(p =>
-            p.registrationStatus === 'approved' &&
-            (selectedCategory === 'all' || p.category === selectedCategory)
-        )
-        .sort((a, b) => {
-            // 1. Seed Ascending (nulls last)
-            const seedA = a.seed ?? Infinity;
-            const seedB = b.seed ?? Infinity;
-            if (seedA !== seedB) return seedA - seedB;
+    const filteredItems = selectedModality === 'doubles'
+        ? doublesTeams.filter(t => t.category === selectedCategory)
+        : players.filter(p => p.category === selectedCategory);
 
-            // 2. Points Descending
-            const pointsA = playerPoints[a.uid || ''] ?? 0;
-            const pointsB = playerPoints[b.uid || ''] ?? 0;
-            if (pointsA !== pointsB) return pointsB - pointsA;
-
-            // 3. Name Ascending
-            return a.name.localeCompare(b.name);
-        });
+    const currentPending = selectedModality === 'doubles'
+        ? doublesTeams.filter(t => t.paymentStatus === 'unpaid' && !!t.paymentProofUrl)
+        : pendingRegs;
 
     if (loading) return (
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -427,80 +601,124 @@ const TournamentPlayersPage = () => {
 
     return (
         <div className="space-y-10 animate-fade-in relative">
-            {/* Header */}
+            {/* Header omitted for brevity, same as before but ensured buttons call correct handlers */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => navigate(`/admin/tournaments/${id}`)}
-                        className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-white transition-all"
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
+                    <button onClick={() => navigate(`/admin/tournaments/${id}`)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-white transition-all"><ArrowLeft size={20} /></button>
                     <div>
                         <h1 className="text-white text-3xl font-black uppercase tracking-tight">{tournament?.name} - {t('admin.tournaments.players.title')}</h1>
                         <p className="text-gray-500 font-bold uppercase text-xs tracking-widest mt-1">{t('admin.tournaments.manageRoster')}</p>
                     </div>
                 </div>
-
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleCleanup}
-                        className="p-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl border border-red-500/10 transition-all"
-                        title={t('admin.tournaments.deleteAllPlayers')}
-                    >
-                        <Trash2 size={24} />
-                    </button>
-                    <button
-                        onClick={() => setShowRandomModal(true)}
-                        className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"
-                        title={t('admin.tournaments.genTestPlayers')}
-                    >
-                        <Users size={24} />
-                    </button>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-tennis-green/20 transition-all flex items-center gap-2"
-                    >
+                    <button onClick={handleCleanup} className="p-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl border border-red-500/10 transition-all"><Trash2 size={24} /></button>
+                    <button onClick={() => setShowRandomModal(true)} className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"><Users size={24} /></button>
+                    <button onClick={() => setShowAddModal(true)} className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2">
                         <Plus size={20} />
-                        {t('admin.tournaments.addPlayer')}
+                        {selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}
                     </button>
                 </div>
             </div>
 
-            {/* Pending Requests Section */}
-            {pendingRegs.length > 0 && (
-                <div className="space-y-6">
-                    <h2 className="text-white text-xl font-bold uppercase tracking-tight flex items-center gap-3">
-                        <Users className="text-orange-500" />
-                        {t('admin.tournaments.pendingRegs', { count: pendingRegs.length })}
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {pendingRegs.map(player => (
-                            <div key={player.id} className="glass border-orange-500/20 p-6 rounded-3xl space-y-4">
-                                <div className="flex justify-between items-start">
+            <div className="flex flex-wrap items-center gap-4">
+                {(tournament?.modalities?.doubles || tournament?.modalityConfig?.doubles) && (
+                    <div className="flex items-center gap-4 bg-white/5 p-1.5 rounded-2xl w-fit">
+                        {(['singles', 'doubles', 'requests'] as const).map(mod => (
+                            <button key={mod} onClick={() => setSelectedModality(mod)} className={`px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all ${selectedModality === mod ? 'bg-tennis-green text-tennis-dark' : 'text-gray-500 hover:text-white'}`}>
+                                {mod === 'requests' ? `${t('admin.tournaments.players.requests')} (${doublesRequests.length})` : (mod === 'doubles' ? t('admin.tournaments.modalities.doubles') : t('admin.tournaments.modalities.singles')) + ` (${mod === 'doubles' ? doublesTeams.length : players.length})`}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex items-center gap-2 bg-white/5 p-1.5 rounded-2xl w-fit">
+                    {(([...((tournament?.categories || tournament?.modalityConfig?.[selectedModality === 'requests' ? 'doubles' : selectedModality]?.categories) || [])].sort((a, b) => {
+                        const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
+                        const idxA = order.indexOf(a.toUpperCase());
+                        const idxB = order.indexOf(b.toUpperCase());
+                        return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+                    })).map(cat => {
+                        const count = selectedModality === 'doubles'
+                            ? doublesTeams.filter(t => t.category === cat).length
+                            : players.filter(p => p.category === cat).length;
+                        return (
+                            <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all ${selectedCategory === cat ? 'bg-tennis-green/20 text-tennis-green' : 'text-gray-500 hover:text-white'}`}>
+                                {t(`admin.tournaments.categories.${cat.toLowerCase()}`)} <span className="opacity-60 ml-1">{count}</span>
+                            </button>
+                        );
+                    }))}
+                </div>
+            </div>
+
+            {selectedModality === 'requests' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {doublesRequests.map(req => (
+                        <div key={req.id} className="glass p-6 rounded-3xl space-y-4">
+                            <h3 className="text-white font-bold">{req.fromUserName} {'->'} {req.toUserName}</h3>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleAcceptRequest(req)} className="flex-1 bg-blue-500 text-white py-2 rounded-xl text-xs font-bold uppercase">Accept</button>
+                                <button onClick={() => handleRejectRequest(req)} className="flex-1 bg-red-500/10 text-red-500 py-2 rounded-xl text-xs font-bold uppercase">Reject</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="space-y-8">
+                    {currentPending.length > 0 && (
+                        <div className="space-y-4">
+                            <h2 className="text-white text-xl font-bold uppercase">{t('admin.tournaments.pendingRegistrations')}</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {currentPending.map(item => (
+                                    <div key={item.id} className="glass p-6 rounded-3xl flex justify-between items-center">
+                                        <div>
+                                            <h3 className="text-white font-bold">{('player1Uid' in item) ? (item as DoublesTeam).teamName || `${(item as DoublesTeam).player1Name} / ${(item as DoublesTeam).player2Name}` : (item as TournamentPlayer).name}</h3>
+                                            <p className="text-gray-500 text-xs">{item.category}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button title={t('common.approve')} onClick={() => ('player1Uid' in item) ? handleApprovePayment(item as DoublesTeam) : handleApproveRegistration((item as TournamentPlayer).id)} className="bg-tennis-green p-2 rounded-xl text-white"><Check size={20} /></button>
+                                            <button title={t('common.reject')} onClick={() => { if ('player1Uid' in item) setSelectedTeam(item as DoublesTeam); else setSelectedPlayer(item as TournamentPlayer); setShowRejectModal(true); }} className="bg-red-500/10 p-2 rounded-xl text-red-500"><X size={20} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-white text-xl font-bold uppercase">{selectedModality === 'doubles' ? t('admin.tournaments.modalities.doubles') : t('admin.tournaments.modalities.singles')} {t('admin.tournaments.players.roster')}</h2>
+                        <button onClick={handleAutoSeed} className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-xl text-blue-400 text-xs font-bold uppercase"><RefreshCw size={14} /> {t('admin.tournaments.players.autoSeed')}</button>
+                    </div>
+
+                    <div className="space-y-4">
+                        {filteredItems.map(item => (
+                            <div key={item.id} className="glass p-6 rounded-[32px] flex items-center justify-between group">
+                                <div onClick={() => { if (!('player1Uid' in item)) { setSelectedPlayer(item as TournamentPlayer); setShowStatsModal(true); } }} className="flex items-center gap-6 cursor-pointer">
+                                    <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-white font-black text-2xl group-hover:bg-tennis-green group-hover:text-tennis-dark transition-all">
+                                        {('player1Uid' in item) ? <Users size={24} /> : (item as TournamentPlayer).name.charAt(0)}
+                                    </div>
                                     <div>
-                                        <h3 className="text-white font-bold text-lg">{player.name}</h3>
-                                        <p className="text-gray-500 text-xs">{player.email}</p>
-                                        {player.category && (
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded mt-2 inline-block">
-                                                {t('admin.tournaments.category')}: {player.category ? t(`admin.tournaments.categories.${player.category}`) : t('common.none')}
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-white font-bold text-lg">{('player1Uid' in item) ? (item as DoublesTeam).teamName || `${(item as DoublesTeam).player1Name} / ${(item as DoublesTeam).player2Name}` : (item as TournamentPlayer).name}</h3>
+                                            {item.isWildcard && <span className="text-yellow-500"><Crown size={14} /></span>}
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1">
+                                            <span className="text-[10px] text-tennis-green uppercase font-black">
+                                                {item.category ? t(`admin.tournaments.categories.${(item.category as string).toLowerCase()}`) : ''}
                                             </span>
-                                        )}
+                                            {item.seed && <span className="text-[10px] text-blue-400 uppercase font-black">{t('bracket.seed')} #{item.seed}</span>}
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex gap-2 pt-2">
-                                    <button
-                                        onClick={() => handleApprove(player)}
-                                        className="flex-1 bg-tennis-green text-tennis-dark py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest hover:scale-[1.02] transition-all"
-                                    >
-                                        {t('common.approve')}
-                                    </button>
-                                    <button
-                                        onClick={() => { setSelectedPlayer(player); setShowRejectModal(true); }}
-                                        className="flex-1 bg-red-500/10 text-red-500 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all"
-                                    >
-                                        {t('common.reject')}
-                                    </button>
+                                <div className="flex items-center gap-3">
+                                    <button title={t('common.checkIn')} onClick={() => handleToggleCheckIn(item)} className={`p-3 rounded-xl ${(('player1Uid' in item) ? (item as DoublesTeam).player1CheckedIn : (item as TournamentPlayer).isCheckedIn) ? 'text-pink-400 bg-pink-500/10' : 'text-gray-500 bg-white/5'}`}><CheckCircle2 size={20} /></button>
+                                    <button title={t('common.manage')} onClick={() => { if ('player1Uid' in item) setSelectedTeam(item as DoublesTeam); else setSelectedPlayer(item as TournamentPlayer); setSeedValue(item.seed?.toString() || ''); setShowSeedModal(true); }} className="p-3 rounded-xl bg-white/5 text-gray-500 hover:text-white"><ShieldAlert size={20} /></button>
+                                    <button title={t('common.wildcard')} onClick={() => handleToggleWildcard(item)} className={`p-3 rounded-xl ${item.isWildcard ? 'text-yellow-500 bg-yellow-500/10' : 'text-gray-500 bg-white/5'}`}><Crown size={20} /></button>
+                                    {item.paymentStatus !== 'paid' ? (
+                                        <button title={t('common.payment')} onClick={() => { if ('player1Uid' in item) setSelectedTeam(item as DoublesTeam); else setSelectedPlayer(item as TournamentPlayer); setShowPaymentModal(true); }} className="p-3 rounded-xl bg-white/5 text-gray-500 hover:text-tennis-green"><DollarSign size={20} /></button>
+                                    ) : (
+                                        <div className="p-3 text-blue-400" title={t('common.paid')}><Check size={20} /></div>
+                                    )}
+                                    <button title={t('common.delete')} onClick={() => handleRemove(item)} className="p-3 rounded-xl bg-white/5 text-gray-500 hover:text-red-500"><Trash2 size={20} /></button>
                                 </div>
                             </div>
                         ))}
@@ -508,475 +726,162 @@ const TournamentPlayersPage = () => {
                 </div>
             )}
 
-            {/* Approved Players Section */}
-            <div className="space-y-8">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                    <h2 className="text-white text-xl font-bold uppercase tracking-tight flex items-center gap-3">
-                        <CheckCircle2 className="text-tennis-green" />
-                        {t('admin.tournaments.approvedRoster', { count: players.length })}
-                    </h2>
-
-                    {tournament?.categories && tournament.categories.length > 0 && (
-                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1">
-                            <button
-                                onClick={() => setSelectedCategory('all')}
-                                className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === 'all' ? 'bg-white text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
-                            >
-                                {t('common.allCategories')}
-                            </button>
-                            {[...(tournament.categories || [])].sort((a, b) => {
-                                const order = ['OPEN', 'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'ROOKIE'];
-                                return order.indexOf(a.toUpperCase()) - order.indexOf(b.toUpperCase());
-                            }).map(cat => (
-                                <button
-                                    key={cat}
-                                    onClick={() => setSelectedCategory(cat)}
-                                    className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCategory === cat ? 'bg-white text-tennis-dark' : 'bg-white/5 text-gray-400 hover:text-white'}`}
-                                >
-                                    {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                    {filteredPlayers.length === 0 ? (
-                        <div className="glass p-20 rounded-[40px] border-dashed border-2 border-white/10 flex flex-col items-center justify-center text-center">
-                            <h3 className="text-white text-xl font-bold">{t('admin.tournaments.noPlayers')}</h3>
-                            <p className="text-gray-500 mt-2">{t('admin.tournaments.noPlayersDesc')}</p>
-                        </div>
-                    ) : (
-                        filteredPlayers.map(player => (
-                            <div key={player.id} className="glass p-6 rounded-[32px] border-white/5 hover:border-white/10 transition-all flex flex-col md:flex-row items-center justify-between gap-6 group">
-                                <div
-                                    onClick={() => { setSelectedPlayer(player); setShowStatsModal(true); }}
-                                    className="flex items-center gap-6 w-full md:w-auto cursor-pointer group"
-                                >
-                                    <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-white shrink-0 font-black text-2xl group-hover:bg-tennis-green group-hover:text-tennis-dark transition-all duration-500">
-                                        {player.name.charAt(0)}
-                                    </div>
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-3">
-                                            <h3 className="text-white font-bold text-lg">{player.name}</h3>
-                                            {player.isWildcard && (
-                                                <span className="bg-yellow-500/20 text-yellow-500 text-[8px] font-black px-2 py-0.5 rounded border border-yellow-500/20 flex items-center gap-1">
-                                                    <Crown size={10} />
-                                                    WC
-                                                </span>
-                                            )}
-                                            {player.isManual && (
-                                                <span className="text-gray-600 text-[8px] font-black uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">{t('common.test')}</span>
-                                            )}
-                                        </div>
-                                        <p className="text-gray-500 text-xs">{player.email || t('admin.tournaments.noEmail')}</p>
-                                        <div className="flex items-center gap-4 mt-2">
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-tennis-green bg-tennis-green/5 px-2 py-0.5 rounded border border-tennis-green/10">
-                                                {player.category ? t(`admin.tournaments.categories.${player.category.toLowerCase()}`) : t('admin.tournaments.noCategory')}
-                                            </span>
-                                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${player.paymentStatus === 'paid' ? 'text-blue-400 bg-blue-500/5 border-blue-500/10' : 'text-gray-600 bg-white/5 border-white/5'}`}>
-                                                {player.paymentStatus === 'paid' ? t('common.paid') : t('common.unpaid')}
-                                            </span>
-                                            {player.registrationStatus === 'rejected' && (
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
-                                                    {t('common.rejected') || 'Rejected'}
-                                                </span>
-                                            )}
-                                            {player.seed && (
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10">
-                                                    {t('admin.tournaments.seedNum', { num: player.seed })}
-                                                </span>
-                                            )}
-                                            {player.isCheckedIn && (
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/20 flex items-center gap-1">
-                                                    <CheckCircle2 size={10} />
-                                                    {t('admin.tournaments.checkIn.title') || "Checked In"}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                                    <button
-                                        onClick={() => handleToggleCheckIn(player)}
-                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.isCheckedIn ? 'bg-pink-500/20 text-pink-400' : 'bg-white/5 text-gray-700 hover:bg-pink-500/10 hover:text-pink-400'}`}
-                                        title={player.isCheckedIn ? (t('admin.tournaments.checkIn.revert') || "Revert Check In") : (t('admin.tournaments.checkIn.title') || "Check In")}
-                                    >
-                                        <CheckCircle2 size={20} />
-                                    </button>
-                                    <button
-                                        onClick={() => { setSelectedPlayer(player); setSeedValue(player.seed?.toString() || ''); setShowSeedModal(true); }}
-                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.seed ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-gray-700 hover:text-white'}`}
-                                        title={t('admin.tournaments.assignSeed')}
-                                    >
-                                        <ShieldAlert size={20} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleToggleWildcard(player)}
-                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${player.isWildcard ? 'bg-yellow-500/10 text-yellow-500' : 'bg-white/5 text-gray-700 hover:text-white'}`}
-                                        title={t('admin.tournaments.toggleWildcard')}
-                                    >
-                                        <Crown size={20} />
-                                    </button>
-                                    {player.paymentStatus !== 'paid' ? (
-                                        <button
-                                            onClick={() => { setSelectedPlayer(player); setShowPaymentModal(true); }}
-                                            className="w-12 h-12 bg-white/5 hover:bg-tennis-green hover:text-tennis-dark rounded-2xl flex items-center justify-center text-gray-500 transition-all border border-white/5 hover:border-tennis-green"
-                                            title={t('admin.tournaments.recordPayment')}
-                                        >
-                                            <DollarSign size={20} />
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => handleRevertPayment(player)}
-                                            className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center border border-blue-500/10 hover:bg-blue-500/20 transition-all"
-                                            title={t('admin.tournaments.revertPayment')}
-                                        >
-                                            <RefreshCw size={20} />
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleRemovePlayer(player.id)}
-                                        className="w-12 h-12 bg-white/5 hover:bg-red-500/20 text-gray-700 hover:text-red-500 rounded-2xl flex items-center justify-center transition-all border border-white/5 hover:border-red-500/20"
-                                        title={t('admin.tournaments.removePlayer')}
-                                    >
-                                        <Trash2 size={20} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
-            {/* Modal: Add Player */}
+            {/* Modals Implementation */}
             {showAddModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowAddModal(false)}></div>
-                    <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-950 border-l border-white/10 z-50 p-12 overflow-y-auto transform transition-transform duration-300 animate-slide-in-right">
-                        <div className="flex justify-between items-center mb-10">
-                            <div>
-                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.addPlayer')}</h2>
-                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.manualEnroll')}</p>
-                            </div>
-                            <button onClick={() => setShowAddModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 hover:text-white transition-all">
-                                <X size={24} />
-                            </button>
-                        </div>
-
+                <div className="fixed inset-0 z-50 flex justify-end">
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
+                    <div className="w-full max-w-xl bg-gray-950 p-12 overflow-y-auto relative border-l border-white/10">
+                        <h2 className="text-white text-3xl font-black uppercase mb-10">{selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}</h2>
                         <form onSubmit={handleAddPlayer} className="space-y-8">
-                            <div className="space-y-4">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.fullName')}</label>
-                                <input
-                                    required
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
-                                    value={newPlayer.name}
-                                    onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })}
-                                    placeholder={t('admin.tournaments.phFullName')}
-                                />
+                            <input className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold border border-white/10" value={newPlayer.name} onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })} placeholder={t('common.name')} required />
+                            {selectedModality === 'doubles' && <input className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold border border-white/10" value={newPlayer.player2Name} onChange={e => setNewPlayer({ ...newPlayer, player2Name: e.target.value })} placeholder={t('admin.tournaments.partnerName')} required />}
+                            <div onClick={() => setNewPlayer({ ...newPlayer, isWildcard: !newPlayer.isWildcard })} className={`p-6 rounded-2xl cursor-pointer flex justify-between items-center ${newPlayer.isWildcard ? 'bg-yellow-500/10 border-yellow-500' : 'bg-white/5'}`}>
+                                <div className="flex items-center gap-4"><Crown className={newPlayer.isWildcard ? 'text-yellow-500' : 'text-gray-500'} /><span className="text-white font-bold">{t('common.wildcard')}</span></div>
+                                <div className={`w-6 h-6 rounded-full border-2 ${newPlayer.isWildcard ? 'bg-yellow-500 border-yellow-500' : 'border-gray-800'}`} />
                             </div>
-                            <div className="space-y-4">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.emailOptional')}</label>
-                                <input
-                                    type="email"
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
-                                    value={newPlayer.email}
-                                    onChange={e => setNewPlayer({ ...newPlayer, email: e.target.value })}
-                                    placeholder={t('admin.tournaments.phEmail')}
-                                />
-                                <p className="text-[10px] text-gray-600 italic">{t('admin.tournaments.emailEmailHint')}</p>
-                            </div>
-
-                            <div
-                                onClick={() => setNewPlayer({ ...newPlayer, isWildcard: !newPlayer.isWildcard })}
-                                className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${newPlayer.isWildcard ? 'bg-yellow-500/10 border-yellow-500/50' : 'bg-white/5 border-white/10 opacity-50'}`}
-                            >
-                                <div className="flex items-center gap-4">
-                                    <Crown className={newPlayer.isWildcard ? 'text-yellow-500' : 'text-gray-500'} />
-                                    <div>
-                                        <p className={`font-bold text-sm uppercase tracking-tight ${newPlayer.isWildcard ? 'text-white' : 'text-gray-500'}`}>{t('admin.tournaments.wildcardEntry')}</p>
-                                        <p className="text-[10px] text-gray-600">{t('admin.tournaments.goldenTicket')}</p>
-                                    </div>
-                                </div>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${newPlayer.isWildcard ? 'border-yellow-500 bg-yellow-500' : 'border-gray-800'}`}>
-                                    {newPlayer.isWildcard && <Check size={14} className="text-tennis-dark" />}
-                                </div>
-                            </div>
-
-                            <button
-                                disabled={processing}
-                                className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-10"
-                            >
-                                {processing ? <RefreshCw className="animate-spin" /> : <UserPlus size={24} />}
-                                {t('admin.tournaments.enrollPlayer')}
+                            <button className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest">
+                                {selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}
                             </button>
                         </form>
                     </div>
-                </>
+                </div>
             )}
 
-            {/* Modal: Record Payment */}
-            {showPaymentModal && selectedPlayer && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowPaymentModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.entryFeeLabel')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.recordManualPayment')}</p>
-                                </div>
-                                <button onClick={() => setShowPaymentModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
-                            </div>
+            {showSeedModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                    <div className="fixed inset-0 bg-black/80" onClick={() => setShowSeedModal(false)} />
+                    <div className="bg-gray-950 p-12 rounded-[40px] border border-white/10 w-full max-w-md relative">
+                        <h2 className="text-white text-2xl font-black uppercase mb-6">{t('admin.tournaments.players.assignSeed')}</h2>
+                        <input type="number" className="w-full bg-white/5 p-5 rounded-2xl text-white text-3xl text-center font-black" value={seedValue} onChange={e => setSeedValue(e.target.value)} autoFocus />
+                        <button onClick={handleUpdateSeed} className="w-full bg-tennis-green text-tennis-dark py-5 rounded-2xl mt-8 font-black uppercase">{t('common.update')}</button>
+                    </div>
+                </div>
+            )}
 
-                            <div className="bg-white/5 rounded-3xl p-6 text-center">
-                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('admin.tournaments.player')}</p>
-                                <p className="text-white text-2xl font-black">{selectedPlayer.name}</p>
+            {showPaymentModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
+                    <div className="bg-gray-950 p-10 rounded-[40px] border border-white/10 w-full max-w-md relative shadow-2xl">
+                        <div className="flex items-center gap-4 border-b border-white/5 pb-6 mb-8">
+                            <div className="w-12 h-12 bg-tennis-green/10 rounded-2xl flex items-center justify-center text-tennis-green">
+                                <DollarSign size={24} />
                             </div>
+                            <h2 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.players.recordPayment')}</h2>
+                        </div>
 
-                            <form onSubmit={handlePayment} className="space-y-6">
-                                <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.amount')} ($)</label>
+                        <div className="space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.edit.fee')}</label>
+                                <div className="relative group">
+                                    <DollarSign className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-tennis-green transition-colors" size={20} />
                                     <input
-                                        required
                                         type="number"
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-3xl text-center focus:outline-none focus:border-tennis-green/50"
+                                        className="w-full bg-white/5 border border-white/5 rounded-2xl pl-16 pr-6 py-5 text-white text-2xl font-black focus:outline-none focus:border-tennis-green/20 transition-all"
                                         value={paymentInfo.amount}
                                         onChange={e => setPaymentInfo({ ...paymentInfo, amount: e.target.value })}
                                     />
                                 </div>
-                                <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.internalNote')}</label>
-                                    <input
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-tennis-green/50"
-                                        value={paymentInfo.note}
-                                        onChange={e => setPaymentInfo({ ...paymentInfo, note: e.target.value })}
-                                        placeholder={t('admin.tournaments.phInternalNote')}
-                                    />
-                                </div>
-                                <button
-                                    disabled={processing}
-                                    className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                                >
-                                    {processing ? <RefreshCw className="animate-spin" /> : <CheckCircle2 size={24} />}
-                                    {t('admin.tournaments.confirmPayment')}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Modal: Reject Request */}
-            {showRejectModal && selectedPlayer && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowRejectModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-red-500 text-3xl font-black uppercase tracking-tight">{t('common.reject')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.registrationDenial')}</p>
-                                </div>
-                                <button onClick={() => setShowRejectModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
                             </div>
 
-                            <p className="text-gray-400">{t('admin.tournaments.denyingRegFor')} <span className="font-bold text-white">{selectedPlayer.name}</span>. {t('admin.tournaments.provideReasonSent')}</p>
-
-                            <div className="space-y-4">
-                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.reasonRejection')}</label>
-                                <textarea
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-red-500/50 min-h-[120px]"
-                                    value={rejectReason}
-                                    onChange={e => setRejectReason(e.target.value)}
-                                    placeholder={t('admin.tournaments.phReasonRejection')}
-                                />
-                            </div>
-
-                            <button
-                                onClick={handleReject}
-                                disabled={processing || !rejectReason.trim()}
-                                className="w-full bg-red-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-red-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                            >
-                                {processing ? <RefreshCw className="animate-spin" /> : <X size={24} />}
-                                {t('admin.tournaments.confirmRejection')}
-                            </button>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Modal: Random (Developer Tools) */}
-            {showRandomModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowRandomModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.testSuite')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.genRandomPlayers')}</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-3 text-center">
+                                    <Banknote size={24} className="text-tennis-green" />
+                                    <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">{t('admin.tournaments.paymentMethods.labels.cash')}</span>
                                 </div>
-                                <button onClick={() => setShowRandomModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.numPlayersLabel')}</label>
-                                    <input
-                                        type="number"
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl text-center focus:outline-none focus:border-blue-500/50"
-                                        value={randomCount}
-                                        onChange={e => setRandomCount(e.target.value)}
-                                    />
-                                </div>
-
-                                <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.assignToCategory')}</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {CATEGORY_ORDER.map(cat => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => setRandomCategory(cat === randomCategory ? null : cat)}
-                                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${randomCategory === cat ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/20'}`}
-                                            >
-                                                {t(`admin.tournaments.categories.${cat.toLowerCase()}`)}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={handleGenerateRandom}
-                                    disabled={processing}
-                                    className="w-full bg-blue-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                                >
-                                    {processing ? <RefreshCw className="animate-spin" /> : <Users size={24} />}
-                                    {t('admin.tournaments.runGenerator')}
-                                </button>
-
-                                <div className="pt-4 border-t border-white/5 space-y-4">
-                                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">{t('admin.tournaments.batchOperations')}</p>
-                                    <button
-                                        onClick={handleAutoSeed}
-                                        disabled={processing}
-                                        className="w-full bg-white/5 hover:bg-white/10 text-white py-4 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/5"
-                                    >
-                                        <ShieldAlert size={16} />
-                                        {t('admin.tournaments.autoSeedClub')}
-                                    </button>
+                                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-3 text-center">
+                                    <Building2 size={24} className="text-blue-400" />
+                                    <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">{t('admin.tournaments.paymentMethods.labels.wireTransfer')}</span>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
 
-            {/* Modal: Seed Management */}
-            {showSeedModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowSeedModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.assignSeed')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{selectedPlayer?.name}</p>
-                                </div>
-                                <button onClick={() => setShowSeedModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleUpdateSeed} className="space-y-6">
-                                <div className="space-y-4">
-                                    <label className="text-gray-400 text-xs font-bold uppercase tracking-widest ml-1">{t('admin.tournaments.seedInputLabel')}</label>
-                                    <input
-                                        type="number"
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-white text-3xl font-black text-center focus:outline-none focus:border-tennis-green/50 transition-all"
-                                        placeholder={t('admin.tournaments.phSeedInput')}
-                                        value={seedValue}
-                                        onChange={e => setSeedValue(e.target.value)}
-                                        autoFocus
-                                    />
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={processing}
-                                    className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                                >
-                                    {processing ? <RefreshCw className="animate-spin" /> : <Check size={24} />}
-                                    {t('admin.tournaments.saveSeedAssignment')}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Generic Confirmation Modal */}
-            {confirmModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fade-in">
-                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                            <AlertTriangle size={32} />
-                        </div>
-                        <div className="space-y-2">
-                            <h3 className="text-white text-2xl font-bold">{confirmModal.title}</h3>
-                            <p className="text-gray-400 leading-relaxed">{confirmModal.message}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                            <button
-                                onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
-                            >
-                                {t('common.cancel')}
-                            </button>
-                            <button
-                                onClick={confirmModal.onConfirm}
-                                disabled={processing}
-                                className={`py-4 rounded-2xl font-bold transition-colors flex items-center justify-center gap-2 ${confirmModal.type === 'danger' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark'}`}
-                            >
-                                {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Error Modal */}
-            {errorModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in">
-                    <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
-                        <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-2">
-                            <AlertTriangle size={32} />
-                        </div>
-                        <h3 className="text-white text-xl font-bold">{t('common.error')}</h3>
-                        <p className="text-gray-400">{errorModal.message}</p>
                         <button
-                            onClick={() => setErrorModal(prev => ({ ...prev, open: false }))}
-                            className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                            onClick={handleRecordPayment}
+                            disabled={processing}
+                            className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl mt-10 font-black uppercase tracking-widest shadow-xl shadow-tennis-green/10 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                            {t('common.close')}
+                            {processing && <RefreshCw size={20} className="animate-spin" />}
+                            {t('common.complete')}
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Player Stats Modal */}
+            {showRandomModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                    <div className="fixed inset-0 bg-black/80" onClick={() => setShowRandomModal(false)} />
+                    <div className="bg-gray-950 p-12 rounded-[40px] border border-white/10 w-full max-w-md relative">
+                        <h2 className="text-white text-2xl font-black uppercase mb-6">{t('admin.tournaments.players.generateTestTitle')}</h2>
+                        <div className="space-y-4">
+                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('admin.tournaments.players.generateCount')}</label>
+                            <input type="number" className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold" value={randomCount} onChange={e => setRandomCount(e.target.value)} placeholder="5" />
+                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('admin.tournaments.players.fixedCategory')}</label>
+                            <div className="w-full bg-white/5 p-5 rounded-2xl text-tennis-green font-bold border border-white/5">
+                                {selectedCategory ? t(`admin.tournaments.categories.${selectedCategory.toLowerCase()}`) : '---'}
+                            </div>
+                        </div>
+                        <button onClick={handleGenerateRandom} className="w-full bg-blue-500 text-white py-5 rounded-2xl mt-8 font-black uppercase">{t('admin.tournaments.players.generateButton')}</button>
+                    </div>
+                </div>
+            )}
+
+            {showRejectModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                    <div className="fixed inset-0 bg-black/80" onClick={() => setShowRejectModal(false)} />
+                    <div className="bg-gray-950 p-12 rounded-[40px] border border-white/10 w-full max-w-md relative">
+                        <h2 className="text-white text-2xl font-black uppercase mb-6">{t('admin.tournaments.rejectRegistration')}</h2>
+                        <textarea className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold h-32" value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={t('admin.tournaments.rejectReasonPh')} />
+                        <button onClick={handleRejectRegistration} className="w-full bg-red-500 text-white py-5 rounded-2xl mt-8 font-black uppercase">{t('common.reject')}</button>
+                    </div>
+                </div>
+            )}
+
+            {confirmModal.open && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm no-print">
+                    <div className="glass max-w-md w-full p-12 rounded-[40px] text-center space-y-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className={`w-20 h-20 ${confirmModal.type === 'success' ? 'bg-tennis-green/10 text-tennis-green' : confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'} rounded-3xl flex items-center justify-center mx-auto`}>
+                            {confirmModal.type === 'success' ? <CheckCircle2 size={40} /> : <AlertTriangle size={40} />}
+                        </div>
+                        <h2 className="text-white text-2xl font-black uppercase tracking-tight">{confirmModal.title}</h2>
+                        <p className="text-gray-400 font-bold leading-relaxed">{confirmModal.message}</p>
+                        <div className="flex gap-4">
+                            {confirmModal.type !== 'success' && (
+                                <button onClick={() => setConfirmModal({ ...confirmModal, open: false })} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-gray-400 font-black rounded-2xl transition-all uppercase tracking-widest border border-white/10">
+                                    {t('common.cancel')}
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    if (confirmModal.type === 'success') {
+                                        setConfirmModal({ ...confirmModal, open: false });
+                                    } else {
+                                        confirmModal.onConfirm().then(() => setConfirmModal({ ...confirmModal, open: false }));
+                                    }
+                                }}
+                                className={`flex-1 py-4 ${confirmModal.type === 'success' ? 'bg-tennis-green text-tennis-dark' : 'bg-red-500 text-white'} font-black rounded-2xl transition-all uppercase tracking-widest shadow-lg`}
+                            >
+                                {confirmModal.type === 'success' ? t('common.close') : t('common.confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showStatsModal && selectedPlayer && (
-                <PlayerStatsModal
-                    player={selectedPlayer}
-                    onClose={() => setShowStatsModal(false)}
-                />
+                <PlayerStatsModal player={selectedPlayer} onClose={() => setShowStatsModal(false)} />
+            )}
+            {/* Error Modal */}
+            {errorModal.open && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm no-print">
+                    <div className="glass max-w-md w-full p-10 rounded-[40px] border-red-500/20 text-center space-y-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center text-red-500 mx-auto">
+                            <AlertTriangle size={40} />
+                        </div>
+                        <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('common.error')}</h3>
+                        <p className="text-gray-400 font-bold leading-relaxed">{errorModal.message}</p>
+                        <button onClick={() => setErrorModal({ open: false, message: '' })} className="w-full py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-2xl transition-all uppercase tracking-widest border border-white/10">{t('common.close')}</button>
+                    </div>
+                </div>
             )}
         </div>
     );

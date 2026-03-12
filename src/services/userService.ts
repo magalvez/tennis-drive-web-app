@@ -214,9 +214,12 @@ export const recalculateGlobalRankings = async () => {
     }
 }
 
-export const getAdmins = async (): Promise<UserData[]> => {
+export const getAdmins = async (clubId?: string): Promise<UserData[]> => {
     try {
-        const q = query(collection(db, "users"), where("role", "==", "admin"));
+        let q = query(collection(db, "users"), where("role", "==", "admin"));
+        if (clubId) {
+            q = query(q, where("managedClubId", "==", clubId));
+        }
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
     } catch (error) {
@@ -225,7 +228,7 @@ export const getAdmins = async (): Promise<UserData[]> => {
     }
 };
 
-export const promoteUserByEmail = async (email: string): Promise<boolean> => {
+export const promoteUserByEmail = async (email: string, clubId?: string): Promise<boolean> => {
     try {
         const q = query(collection(db, "users"), where("email", "==", email));
         const snapshot = await getDocs(q);
@@ -241,11 +244,12 @@ export const promoteUserByEmail = async (email: string): Promise<boolean> => {
             throw new Error("Manual users cannot be admins");
         }
 
-        if (userData.role === 'admin') {
-            return true;
+        const updateData: any = { role: 'admin' };
+        if (clubId) {
+            updateData.managedClubId = clubId;
         }
 
-        await updateDoc(userDoc.ref, { role: 'admin' });
+        await updateDoc(userDoc.ref, updateData);
         return true;
     } catch (error: any) {
         if (error.message !== "User not found" && error.message !== "Manual users cannot be admins") {
@@ -258,7 +262,10 @@ export const promoteUserByEmail = async (email: string): Promise<boolean> => {
 export const removeAdminRole = async (uid: string): Promise<void> => {
     try {
         const userRef = doc(db, "users", uid);
-        await updateDoc(userRef, { role: 'player' });
+        await updateDoc(userRef, {
+            role: 'player',
+            managedClubId: null
+        });
     } catch (error) {
         console.error("Error removing admin role:", error);
         throw error;

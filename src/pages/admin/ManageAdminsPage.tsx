@@ -7,12 +7,14 @@ import {
     X
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import type { UserData } from '../../services/userService';
 import { getAdmins, promoteUserByEmail, removeAdminRole } from '../../services/userService';
 
 const ManageAdminsPage = () => {
     const { t } = useLanguage();
+    const { managedClubId } = useAuth();
     const [admins, setAdmins] = useState<UserData[]>([]);
     const [loading, setLoading] = useState(true);
     const [email, setEmail] = useState('');
@@ -20,13 +22,16 @@ const ManageAdminsPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        fetchAdmins();
-    }, []);
+        if (managedClubId) {
+            fetchAdmins();
+        }
+    }, [managedClubId]);
 
     const fetchAdmins = async () => {
+        if (!managedClubId) return;
         setLoading(true);
         try {
-            const data = await getAdmins();
+            const data = await getAdmins(managedClubId);
             setAdmins(data);
         } catch (error) {
             console.error(error);
@@ -39,7 +44,7 @@ const ManageAdminsPage = () => {
         if (!email.trim()) return;
         setPromoting(true);
         try {
-            await promoteUserByEmail(email.trim().toLowerCase());
+            await promoteUserByEmail(email.trim().toLowerCase(), managedClubId || undefined);
             setEmail('');
             fetchAdmins();
             alert("User promoted to admin successfully!");
