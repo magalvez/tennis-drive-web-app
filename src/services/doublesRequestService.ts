@@ -20,7 +20,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getTournamentById } from './tournamentService';
-import { createDoublesTeam } from './doublesTeamService';
 
 // ============================================================================
 // INTERFACES
