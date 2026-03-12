@@ -116,9 +116,15 @@ export const notifyPlayerRejected = async (uid: string, title: string, body: str
     }
 };
 
-export const getAllPushTokens = async (): Promise<string[]> => {
+export const getAllPushTokens = async (clubId?: string): Promise<string[]> => {
     try {
-        const q = query(collection(db, 'users'), where('pushToken', '!=', null));
+        const usersRef = collection(db, 'users');
+        let q;
+        if (clubId) {
+            q = query(usersRef, where(`clubs.${clubId}`, "!=", null));
+        } else {
+            q = query(usersRef, where('pushToken', '!=', null));
+        }
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => doc.data().pushToken).filter(t => !!t);
     } catch (error) {
@@ -166,11 +172,15 @@ export interface UserWithToken {
     pushToken: string;
 }
 
-export const getUsersWithTokens = async (): Promise<UserWithToken[]> => {
+export const getUsersWithTokens = async (clubId?: string): Promise<UserWithToken[]> => {
     try {
-        // Simple query for all users with tokens for now
-        // If clubId is provided, we can filter but users structure might vary
-        const q = query(collection(db, 'users'), where('pushToken', '!=', null));
+        const usersRef = collection(db, 'users');
+        let q;
+        if (clubId) {
+            q = query(usersRef, where(`clubs.${clubId}`, "!=", null));
+        } else {
+            q = query(usersRef, where('pushToken', '!=', null));
+        }
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({
             uid: doc.id,

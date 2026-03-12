@@ -1,8 +1,6 @@
-import { deleteField, increment } from 'firebase/firestore';
+import { deleteField } from 'firebase/firestore';
 import {
     MessageCircle,
-    Minus,
-    Plus,
     RefreshCw,
     Save,
     Search,
@@ -15,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getClubPlayers, recalculateClubPoints, updateUser } from '../../services/userService';
+import ConfirmModal from '../../components/admin/ConfirmModal';
 
 const PlayersPage = () => {
     const { managedClubId } = useAuth();
@@ -25,9 +24,13 @@ const PlayersPage = () => {
     const [recalculating, setRecalculating] = useState(false);
     const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
     const [pointsToAdd, setPointsToAdd] = useState('');
+    const [padelPointsToAdd, setPadelPointsToAdd] = useState('');
+    const [pickleballPointsToAdd, setPickleballPointsToAdd] = useState('');
+    const [activeSportTab, setActiveSportTab] = useState<'tennis' | 'padel' | 'pickleball'>('tennis');
     const [isSuspended, setIsSuspended] = useState(false);
     const [adminNotes, setAdminNotes] = useState('');
     const [saving, setSaving] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     const loadPlayers = useCallback(async () => {
         if (!managedClubId) return;
@@ -50,7 +53,10 @@ const PlayersPage = () => {
         setSelectedPlayer(player);
         setIsSuspended(player.isSuspended || false);
         setAdminNotes(player.adminNotes || '');
-        setPointsToAdd('');
+        setPointsToAdd(player.points?.toString() || '');
+        setPadelPointsToAdd(player.padelPoints?.toString() || '');
+        setPickleballPointsToAdd(player.pickleballPoints?.toString() || '');
+        setActiveSportTab('tennis');
     };
 
     const handleSaveActions = async () => {
@@ -62,13 +68,22 @@ const PlayersPage = () => {
                 [`clubs.${managedClubId}.adminNotes`]: adminNotes
             };
 
-            const pointsVal = Number(pointsToAdd);
-            if (pointsToAdd.trim() !== '' && !isNaN(pointsVal)) {
-                if (pointsVal === 0) {
-                    updates[`clubs.${managedClubId}.points`] = deleteField();
-                } else {
-                    updates[`clubs.${managedClubId}.points`] = increment(pointsVal);
-                }
+            const tennisVal = Number(pointsToAdd);
+            if (pointsToAdd.trim() !== '' && !isNaN(tennisVal)) {
+                if (tennisVal === 0) updates[`clubs.${managedClubId}.points`] = deleteField();
+                else updates[`clubs.${managedClubId}.points`] = tennisVal;
+            }
+
+            const padelVal = Number(padelPointsToAdd);
+            if (padelPointsToAdd.trim() !== '' && !isNaN(padelVal)) {
+                if (padelVal === 0) updates[`clubs.${managedClubId}.padelPoints`] = deleteField();
+                else updates[`clubs.${managedClubId}.padelPoints`] = padelVal;
+            }
+
+            const pickleVal = Number(pickleballPointsToAdd);
+            if (pickleballPointsToAdd.trim() !== '' && !isNaN(pickleVal)) {
+                if (pickleVal === 0) updates[`clubs.${managedClubId}.pickleballPoints`] = deleteField();
+                else updates[`clubs.${managedClubId}.pickleballPoints`] = pickleVal;
             }
 
             await updateUser(selectedPlayer.uid, updates);
@@ -82,14 +97,13 @@ const PlayersPage = () => {
     };
 
     const handleRecalculate = async () => {
-        if (!managedClubId || !window.confirm(t('admin.tournaments.players.management.recalculateConfirm'))) return;
+        setShowConfirmModal(false);
         setRecalculating(true);
         try {
-            await recalculateClubPoints(managedClubId);
+            await recalculateClubPoints(managedClubId!);
             await loadPlayers();
-            alert(t('common.success'));
         } catch (error) {
-            alert(t('common.error'));
+            console.error(error);
         } finally {
             setRecalculating(false);
         }
@@ -98,7 +112,12 @@ const PlayersPage = () => {
     const filteredPlayers = players.filter(p =>
         (p.displayName || p.name || '').toLowerCase().includes(search.toLowerCase()) ||
         (p.email || '').toLowerCase().includes(search.toLowerCase())
-    ).sort((a, b) => (a.displayName || a.name || '').localeCompare(b.displayName || b.name || ''));
+    ).sort((a, b) => {
+        const pointsA = a.points ?? 0;
+        const pointsB = b.points ?? 0;
+        if (pointsB !== pointsA) return pointsB - pointsA;
+        return (a.displayName || a.name || '').localeCompare(b.displayName || b.name || '');
+    });
 
     return (
         <div className="space-y-8 animate-fade-in relative min-h-[80vh]">
@@ -108,7 +127,7 @@ const PlayersPage = () => {
                     <p className="text-gray-400 mt-2 font-medium">{t('admin.players.subtitle')}</p>
                 </div>
                 <button
-                    onClick={handleRecalculate}
+                    onClick={() => setShowConfirmModal(true)}
                     disabled={recalculating}
                     className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-tennis-green px-6 py-4 rounded-2xl font-black uppercase tracking-widest border border-white/5 transition-all disabled:opacity-50"
                 >
@@ -154,7 +173,11 @@ const PlayersPage = () => {
                                 </div>
                                 <div className="text-right">
                                     <p className="text-tennis-green font-black text-2xl leading-none">{player.points ?? 0}</p>
-                                    <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest mt-1">PTS</p>
+                                    <div className="flex flex-col gap-1 mt-1">
+                                        <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest leading-none">TENNIS PTS</p>
+                                        {player.padelPoints > 0 && <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest leading-none">PADEL: {player.padelPoints}</p>}
+                                        {player.pickleballPoints > 0 && <p className="text-purple-400 text-[10px] font-bold uppercase tracking-widest leading-none">PICKLE: {player.pickleballPoints}</p>}
+                                    </div>
                                 </div>
                             </div>
 
@@ -194,25 +217,55 @@ const PlayersPage = () => {
                             </div>
 
                             <div className="space-y-6">
+                                {/* Sport Tabs */}
+                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5">
+                                    <button
+                                        onClick={() => setActiveSportTab('tennis')}
+                                        className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${activeSportTab === 'tennis' ? 'bg-white/10 text-white shadow-xl' : 'text-gray-500'}`}
+                                    >
+                                        Tennis
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveSportTab('padel')}
+                                        className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${activeSportTab === 'padel' ? 'bg-blue-500/20 text-blue-400 shadow-xl' : 'text-gray-500'}`}
+                                    >
+                                        Padel
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveSportTab('pickleball')}
+                                        className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${activeSportTab === 'pickleball' ? 'bg-purple-500/20 text-purple-400 shadow-xl' : 'text-gray-500'}`}
+                                    >
+                                        Pickleball
+                                    </button>
+                                </div>
+
                                 <div>
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">{t('admin.players.profile.adjustPoints')}</label>
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 block">
+                                        {t('admin.players.profile.adjustPoints')}
+                                        <span className="text-tennis-green ml-1">({activeSportTab.toUpperCase()})</span>
+                                    </label>
                                     <div className="flex items-center gap-4">
                                         <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl flex items-center px-6 py-4">
                                             <input
                                                 type="text"
                                                 className="bg-transparent border-none outline-none text-white text-xl font-bold w-full"
                                                 placeholder="0"
-                                                value={pointsToAdd}
-                                                onChange={(e) => setPointsToAdd(e.target.value)}
+                                                value={
+                                                    activeSportTab === 'tennis' ? pointsToAdd :
+                                                        activeSportTab === 'padel' ? padelPointsToAdd :
+                                                            pickleballPointsToAdd
+                                                }
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (activeSportTab === 'tennis') setPointsToAdd(val);
+                                                    else if (activeSportTab === 'padel') setPadelPointsToAdd(val);
+                                                    else setPickleballPointsToAdd(val);
+                                                }}
                                             />
                                             <span className="text-gray-600 font-bold ml-2">PTS</span>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => setPointsToAdd(prev => (Number(prev) + 10).toString())} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center text-tennis-green transition-all"><Plus size={18} /></button>
-                                            <button onClick={() => setPointsToAdd(prev => (Number(prev) - 10).toString())} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center text-red-500 transition-all"><Minus size={18} /></button>
-                                        </div>
                                     </div>
-                                    <p className="text-gray-600 text-xs mt-2 italic">* Use negative values to subtract points.</p>
+                                    <p className="text-gray-600 text-[10px] mt-2 italic">* This sets the exact point value (0 removes them)</p>
                                 </div>
 
                                 <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl flex items-center justify-between">
@@ -258,6 +311,15 @@ const PlayersPage = () => {
                     </div>
                 </>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={handleRecalculate}
+                title={t('admin.tournaments.players.management.recalculateAction')}
+                message={t('admin.tournaments.players.management.recalculateConfirm')}
+                processing={recalculating}
+            />
         </div>
     );
 };

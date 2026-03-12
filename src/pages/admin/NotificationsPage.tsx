@@ -9,11 +9,13 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import type { UserWithToken } from '../../services/notificationService';
-import { getUsersWithTokens, sendPushNotification, sendPushNotificationsBatch } from '../../services/notificationService';
+import { getAllPushTokens, getUsersWithTokens, sendPushNotification, sendPushNotificationsBatch } from '../../services/notificationService';
 
 const NotificationsPage = () => {
     const { t } = useLanguage();
+    const { managedClubId } = useAuth();
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ const NotificationsPage = () => {
     const fetchUsers = async () => {
         setFetchingUsers(true);
         try {
-            const data = await getUsersWithTokens();
+            const data = await getUsersWithTokens(managedClubId || undefined);
             setAllUsers(data);
             setFilteredUsers(data);
         } catch (error) {
@@ -67,7 +69,7 @@ const NotificationsPage = () => {
                 await sendPushNotification(selectedUser.pushToken, title, body);
                 alert(t('admin.notifications.successSent', { name: selectedUser.displayName }));
             } else {
-                const tokens = allUsers.length > 0 ? allUsers.map(u => u.pushToken) : (await getUsersWithTokens()).map(u => u.pushToken);
+                const tokens = await getAllPushTokens(managedClubId || undefined);
                 if (tokens.length === 0) {
                     alert(t('admin.notifications.errors.noAudience'));
                     return;

@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type TournamentCategory = 'open' | 'first' | 'second' | 'third' | 'fourth' | 'fifth' | 'rookie';
+export type TournamentCategory = 'open' | 'first' | 'second' | 'third' | 'fourth' | 'fifth' | 'sixth' | 'rookie';
 
 export interface ScoringConfig {
     win: number;
@@ -17,6 +17,21 @@ export interface SetScore {
     };
 }
 
+export interface ModalityConfig {
+    singles?: { categories: TournamentCategory[] };
+    doubles?: { categories: TournamentCategory[] };
+}
+
+export interface PaymentMethods {
+    cash: boolean;
+    wireTransfer: boolean;
+    gateway: boolean;
+}
+
+export interface GatewayConfig {
+    disabledMethods: string[];
+}
+
 export interface TournamentData {
     id?: string;
     name: string;
@@ -27,12 +42,22 @@ export interface TournamentData {
     createdAt: Timestamp;
     clubId?: string;
     winnerId?: string;
-    courtType?: 'hard' | 'clay' | 'grass';
+    courtType?: 'hard' | 'clay' | 'grass' | 'indoor' | 'outdoor' | 'glass' | 'wall';
     image?: string | null;
     scoringConfig?: ScoringConfig;
     categories?: TournamentCategory[];
     isChatEnabled?: boolean;
     isChatReadOnly?: boolean;
+    sport?: 'tennis' | 'padel' | 'pickleball';
+    description?: string;
+    modalities?: {
+        singles?: boolean;
+        doubles?: boolean;
+    };
+    modalityConfig?: ModalityConfig;
+    paymentMethods?: PaymentMethods;
+    gatewayConfig?: GatewayConfig;
+    champions?: { [key: string]: string };
 }
 
 export interface TournamentPlayer {
@@ -83,6 +108,15 @@ export interface Match {
     nextMatchId?: string;
     nextMatchSlot?: 1 | 2;
     tournamentName?: string;
+    isDoubles?: boolean;
+    team1Id?: string;
+    team1Name?: string;
+    team2Id?: string;
+    team2Name?: string;
+    winnerTeamId?: string;
+    team1Seed?: number;
+    team2Seed?: number;
+    sport?: 'tennis' | 'padel' | 'pickleball';
 }
 
 export interface GroupStanding {
@@ -106,6 +140,7 @@ export interface TournamentGroup {
     qualifiersCount: number;
     finalStandings?: GroupStanding[];
     category?: TournamentCategory;
+    isDoubles?: boolean;
 }
 
 export interface Transaction {

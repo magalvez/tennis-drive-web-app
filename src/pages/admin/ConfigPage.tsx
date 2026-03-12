@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getClubById, updateClub } from '../../services/clubService';
 import { recalculateGlobalRankings } from '../../services/userService';
+import ConfirmModal from '../../components/admin/ConfirmModal';
 
 const ConfigPage = () => {
     const { managedClubId, logout } = useAuth();
@@ -22,6 +23,7 @@ const ConfigPage = () => {
     const [saving, setSaving] = useState(false);
     const [recalculating, setRecalculating] = useState(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     // Form State
     const [clubName, setClubName] = useState('');
@@ -76,13 +78,13 @@ const ConfigPage = () => {
     };
 
     const handleRecalculateRanking = async () => {
-        if (!window.confirm(t('config.system.recalculateConfirm') || "This will process all match history and update every player's XP. Continue?")) return;
+        setShowConfirmModal(false);
         setRecalculating(true);
         try {
             await recalculateGlobalRankings();
             showSuccess(t('config.system.recalculateSuccess') || "Global rankings recalculated successfully!");
         } catch (error) {
-            alert(t('config.system.recalculateError') || "Failed to recalculate rankings.");
+            console.error(error);
         } finally {
             setRecalculating(false);
         }
@@ -147,6 +149,16 @@ const ConfigPage = () => {
                                     onChange={(e) => setClubLocation(e.target.value)}
                                 />
                             </div>
+
+                            <div>
+                                <label className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-3 block">{t('config.identity.description')}</label>
+                                <textarea
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-tennis-green/50 transition-colors min-h-[120px] resize-none"
+                                    placeholder={t('config.identity.phDescription')}
+                                    value={clubDescription}
+                                    onChange={(e) => setClubDescription(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -209,7 +221,7 @@ const ConfigPage = () => {
                         </div>
 
                         <button
-                            onClick={handleRecalculateRanking}
+                            onClick={() => setShowConfirmModal(true)}
                             disabled={recalculating}
                             className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center gap-4 transition-all group"
                         >
@@ -270,6 +282,15 @@ const ConfigPage = () => {
                     </button>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={handleRecalculateRanking}
+                title={t('config.system.recalculate')}
+                message={t('config.system.recalculateConfirm') || "This will process all match history and update every player's XP. Continue?"}
+                processing={recalculating}
+            />
         </div>
     );
 };

@@ -58,29 +58,29 @@ const getSeededPositions = (count: number): number[] => {
     return positions;
 };
 
-export const generateMainDraw = async (tournamentId: string, players: any[], category?: TournamentCategory) => {
+export const generateMainDraw = async (tournamentId: string, items: any[], category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles') => {
     try {
+        const isDoubles = modality === 'doubles';
         const tournament = await getTournamentById(tournamentId);
         if (!tournament) throw new Error("Tournament not found");
 
-        const bracketSize = calculateBracketSize(players.length);
+        const bracketSize = calculateBracketSize(items.length);
         const rounds = Math.log2(bracketSize);
         const matchesCollection = collection(db, 'tournaments', tournamentId, 'matches');
 
-        // 1. Sort players by seed (if available) or points
-        const sortedPlayers = [...players].sort((a, b) => (a.seed || 999) - (b.seed || 999));
+        // 1. Sort items by seed (if available) or rankValue
+        const sortedItems = [...items].sort((a, b) => (a.seed || 999) - (b.seed || 999));
 
-        // 2. Map seeds to players
-        const seedToPlayer: { [seed: number]: any } = {};
-        sortedPlayers.forEach((p, idx) => {
-            seedToPlayer[idx + 1] = p;
+        // 2. Map seeds to items
+        const seedToItem: { [seed: number]: any } = {};
+        sortedItems.forEach((p, idx) => {
+            seedToItem[idx + 1] = p;
         });
 
         // 3. Get seeded positions for first round
         const seedOrder = getSeededPositions(bracketSize);
 
         // 4. Generate all matches for all rounds to build the tree
-        // We'll store them in a map to link nextMatchId
         const matchTree: { [roundPos: string]: any } = {};
 
         // Generate matches from final back to first round
@@ -90,8 +90,8 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
                 const matchId = `r${r}_p${p}`;
                 const isFirstRound = r === 1;
 
-                let p1 = null;
-                let p2 = null;
+                let item1 = null;
+                let item2 = null;
                 let status = 'pending';
                 let winnerId = undefined;
                 let isBye = false;
@@ -99,12 +99,14 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
                 if (isFirstRound) {
                     const s1 = seedOrder[(p - 1) * 2];
                     const s2 = seedOrder[(p - 1) * 2 + 1];
-                    p1 = seedToPlayer[s1];
-                    p2 = seedToPlayer[s2];
+                    item1 = seedToItem[s1];
+                    item2 = seedToItem[s2];
 
-                    if (!p1 || !p2) {
+                    if (!item1 || !item2) {
                         isBye = true;
-                        winnerId = p1 ? p1.uid : (p2 ? p2.uid : undefined);
+                        winnerId = isDoubles
+                            ? (item1 ? item1.id : (item2 ? item2.id : undefined))
+                            : (item1 ? item1.uid : (item2 ? item2.uid : undefined));
                         status = 'completed';
                     } else {
                         status = 'scheduled';
@@ -112,12 +114,6 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
                 }
 
                 const matchData: any = {
-                    player1Uid: p1?.uid || '',
-                    player1Name: p1?.name || (isFirstRound && !p1 ? 'BYE' : ''),
-                    player1Seed: p1?.seed || null,
-                    player2Uid: p2?.uid || '',
-                    player2Name: p2?.name || (isFirstRound && !p2 ? 'BYE' : ''),
-                    player2Seed: p2?.seed || null,
                     status: status,
                     winnerId: winnerId || null,
                     roundNumber: r,
@@ -127,8 +123,27 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
                     type: 'tournament',
                     category: category || null,
                     isBye,
+                    isDoubles,
+                    sport: tournament.sport,
                     createdAt: new Date().toISOString()
                 };
+
+                if (isDoubles) {
+                    matchData.team1Id = item1?.id || '';
+                    matchData.team1Name = item1?.teamName || (isFirstRound && !item1 ? 'BYE' : '');
+                    matchData.team1Seed = item1?.seed || null;
+                    matchData.team2Id = item2?.id || '';
+                    matchData.team2Name = item2?.teamName || (isFirstRound && !item2 ? 'BYE' : '');
+                    matchData.team2Seed = item2?.seed || null;
+                    if (winnerId) matchData.winnerTeamId = winnerId;
+                } else {
+                    matchData.player1Uid = item1?.uid || '';
+                    matchData.player1Name = item1?.name || (isFirstRound && !item1 ? 'BYE' : '');
+                    matchData.player1Seed = item1?.seed || null;
+                    matchData.player2Uid = item2?.uid || '';
+                    matchData.player2Name = item2?.name || (isFirstRound && !item2 ? 'BYE' : '');
+                    matchData.player2Seed = item2?.seed || null;
+                }
 
                 // Link to next match
                 if (r < rounds) {
@@ -145,18 +160,32 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
                 // If this was a BYE, auto-advance the winner to the next match
                 if (isBye && winnerId && r < rounds) {
                     const nextP = Math.ceil(p / 2);
-                    const nextId = matchTree[`r${r + 1}_p${nextP}`].id;
+                    const nextMatch = matchTree[`r${r + 1}_p${nextP}`];
+                    const nextId = nextMatch.id;
                     const slot = p % 2 === 1 ? 1 : 2;
 
                     const nextMatchRef = doc(db, 'tournaments', tournamentId, 'matches', nextId);
                     const updateData: any = {};
-                    const winnerName = p1 ? p1.name : p2.name;
-                    if (slot === 1) {
-                        updateData.player1Name = winnerName;
-                        updateData.player1Uid = winnerId;
+                    const winnerName = isDoubles
+                        ? (item1 ? item1.teamName : item2.teamName)
+                        : (item1 ? item1.name : item2.name);
+
+                    if (isDoubles) {
+                        if (slot === 1) {
+                            updateData.team1Name = winnerName;
+                            updateData.team1Id = winnerId;
+                        } else {
+                            updateData.team2Name = winnerName;
+                            updateData.team2Id = winnerId;
+                        }
                     } else {
-                        updateData.player2Name = winnerName;
-                        updateData.player2Uid = winnerId;
+                        if (slot === 1) {
+                            updateData.player1Name = winnerName;
+                            updateData.player1Uid = winnerId;
+                        } else {
+                            updateData.player2Name = winnerName;
+                            updateData.player2Uid = winnerId;
+                        }
                     }
                     await updateDoc(nextMatchRef, updateData);
                 }
@@ -168,11 +197,18 @@ export const generateMainDraw = async (tournamentId: string, players: any[], cat
     }
 };
 
-export const deleteBracketMatches = async (tournamentId: string) => {
+export const deleteBracketMatches = async (tournamentId: string, category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles') => {
     try {
-        const q = query(collection(db, 'tournaments', tournamentId, 'matches'), where('type', '==', 'tournament'));
+        const isDoubles = modality === 'doubles';
+        const q = category
+            ? query(collection(db, 'tournaments', tournamentId, 'matches'), where('category', '==', category))
+            : query(collection(db, 'tournaments', tournamentId, 'matches'));
+
         const snapshot = await getDocs(q);
-        const bracketMatches = snapshot.docs.filter(d => (d.data() as any).bracketRound);
+        const bracketMatches = snapshot.docs.filter(d => {
+            const data = d.data() as any;
+            return data.bracketRound && !!data.isDoubles === isDoubles && data.type === 'tournament';
+        });
         await Promise.all(bracketMatches.map(d => deleteDoc(d.ref)));
     } catch (error) {
         console.error(error);
@@ -194,9 +230,6 @@ export const advanceWinner = async (
 
         if (!match.nextMatchId) return;
 
-        const isPlayer1Winner = match.player1Uid === winnerId;
-        const winnerName = isPlayer1Winner ? match.player1Name : match.player2Name;
-
         const nextMatchRef = doc(db, 'tournaments', tournamentId, 'matches', match.nextMatchId);
         const nextMatchSnap = await getDoc(nextMatchRef);
 
@@ -204,12 +237,26 @@ export const advanceWinner = async (
 
         const slot = match.nextMatchSlot || 1;
         const updateData: any = {};
-        if (slot === 1) {
-            updateData.player1Name = winnerName;
-            updateData.player1Uid = winnerId;
+        const isDoubles = !!match.isDoubles;
+
+        if (isDoubles) {
+            const winnerName = match.team1Id === winnerId ? match.team1Name : match.team2Name;
+            if (slot === 1) {
+                updateData.team1Name = winnerName;
+                updateData.team1Id = winnerId;
+            } else {
+                updateData.team2Name = winnerName;
+                updateData.team2Id = winnerId;
+            }
         } else {
-            updateData.player2Name = winnerName;
-            updateData.player2Uid = winnerId;
+            const winnerName = match.player1Uid === winnerId ? match.player1Name : match.player2Name;
+            if (slot === 1) {
+                updateData.player1Name = winnerName;
+                updateData.player1Uid = winnerId;
+            } else {
+                updateData.player2Name = winnerName;
+                updateData.player2Uid = winnerId;
+            }
         }
 
         await updateDoc(nextMatchRef, updateData);

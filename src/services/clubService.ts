@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where, deleteField } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export interface ScoringConfig {
@@ -15,6 +15,10 @@ export interface ClubData {
     createdAt: Timestamp;
     logoUrl?: string;
     scoringConfig?: ScoringConfig;
+    epaycoConfig?: {
+        publicKey: string;
+        testMode: boolean;
+    };
 }
 
 export const createClub = async (data: Omit<ClubData, 'createdAt'>) => {
@@ -79,6 +83,16 @@ export const updateClub = async (id: string, data: Partial<ClubData>) => {
         await updateDoc(docRef, data);
     } catch (error) {
         console.error("Error updating club:", error);
+        throw error;
+    }
+};
+
+export const deleteClubEpaycoConfig = async (id: string) => {
+    try {
+        const docRef = doc(db, "clubs", id);
+        await updateDoc(docRef, { epaycoConfig: deleteField() });
+    } catch (error) {
+        console.error("Error deleting epayco config:", error);
         throw error;
     }
 };

@@ -31,6 +31,9 @@ import {
     getTournamentPlayers,
     updateTournament,
 } from '../../../services/tournamentService';
+import {
+    getDoublesTeams
+} from '../../../services/doublesTeamService';
 import type { ScoringConfig, TournamentData } from '../../../services/types';
 
 const TournamentDetailPage = () => {
@@ -39,8 +42,10 @@ const TournamentDetailPage = () => {
     const navigate = useNavigate();
     const [tournament, setTournament] = useState<TournamentData | null>(null);
     const [players, setPlayers] = useState<any[]>([]);
+    const [doublesTeams, setDoublesTeams] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [matchCount, setMatchCount] = useState(0);
+    const [allMatches, setAllMatches] = useState<any[]>([]);
+    const [activeModality, setActiveModality] = useState<'singles' | 'doubles'>('singles');
     const [updating, setUpdating] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -89,13 +94,29 @@ const TournamentDetailPage = () => {
             ]);
             setTournament(data);
             setPlayers(pData);
-            setMatchCount(matches.length);
-            if (data?.scoringConfig) {
-                setLocalScoring(data.scoringConfig);
+            setAllMatches(matches);
+
+            if (data) {
+                const hasSingles = data.modalities?.singles || data.modalityConfig?.singles;
+                const hasDoubles = data.modalities?.doubles || data.modalityConfig?.doubles;
+
+                if (!hasSingles && hasDoubles) {
+                    setActiveModality('doubles');
+                } else {
+                    setActiveModality('singles');
+                }
+
+                if (hasDoubles) {
+                    const dTeams = await getDoublesTeams(id);
+                    setDoublesTeams(dTeams);
+                }
+
+                if (data.scoringConfig) {
+                    setLocalScoring(data.scoringConfig);
+                }
+                setChatEnabled(data.isChatEnabled !== false);
+                setChatReadOnly(data.isChatReadOnly === true);
             }
-            // Initialize Chat Settings (default to true/false if undefined)
-            setChatEnabled(data?.isChatEnabled !== false); // Default enabled if undefined
-            setChatReadOnly(data?.isChatReadOnly === true); // Default writable if undefined
         } catch (error) {
             console.error(error);
             showInfo(t('common.error'), t('admin.tournaments.fetchError'));
@@ -302,23 +323,52 @@ const TournamentDetailPage = () => {
                 </div>
 
                 {/* Quick Stats Grid */}
-                <div className="grid grid-cols-2 gap-4 w-full xl:w-96">
-                    <div className="glass p-6 rounded-3xl flex flex-col items-center justify-center text-center">
-                        <Users className="text-tennis-green mb-3" size={24} />
-                        <span className="text-white text-3xl font-black">{players.length}</span>
-                        <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">{t('admin.tournaments.playersRegistered')}</span>
-                    </div>
-                    <div className="glass p-6 rounded-3xl flex flex-col items-center justify-center text-center">
-                        <Trophy className="text-blue-400 mb-3" size={24} />
-                        <span className="text-white text-3xl font-black">{matchCount}</span>
-                        <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">{t('admin.tournaments.matchesScheduled')}</span>
-                    </div>
-                    <div className="glass p-6 rounded-3xl flex flex-col col-span-2 items-center justify-center text-center border-tennis-green/20">
-                        <div className="flex items-center gap-2 text-tennis-green mb-1">
-                            <CheckCircle size={16} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">{t('admin.tournaments.readyDraw')}</span>
+                <div className="flex flex-col gap-6 w-full xl:w-96">
+                    {/* Modality Tabs */}
+                    {(tournament.modalities?.singles || tournament.modalityConfig?.singles) &&
+                        (tournament.modalities?.doubles || tournament.modalityConfig?.doubles) && (
+                            <div className="bg-white/5 p-1.5 rounded-2xl flex gap-1">
+                                <button
+                                    onClick={() => setActiveModality('singles')}
+                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModality === 'singles' ? 'bg-tennis-green text-tennis-dark shadow-lg shadow-tennis-green/20' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    {t('admin.tournaments.modalities.singles')}
+                                </button>
+                                <button
+                                    onClick={() => setActiveModality('doubles')}
+                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModality === 'doubles' ? 'bg-tennis-green text-tennis-dark shadow-lg shadow-tennis-green/20' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    {t('admin.tournaments.modalities.doubles')}
+                                </button>
+                            </div>
+                        )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="glass p-6 rounded-3xl flex flex-col items-center justify-center text-center">
+                            <Users className="text-tennis-green mb-3" size={24} />
+                            <span className="text-white text-3xl font-black">
+                                {activeModality === 'doubles' ? doublesTeams.length : players.length}
+                            </span>
+                            <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">
+                                {activeModality === 'doubles'
+                                    ? t('admin.tournaments.modalities.doubles')
+                                    : t('admin.tournaments.playersRegistered')}
+                            </span>
                         </div>
-                        <p className="text-gray-400 text-xs font-medium">{t('admin.tournaments.allOperational')}</p>
+                        <div className="glass p-6 rounded-3xl flex flex-col items-center justify-center text-center">
+                            <Trophy className="text-blue-400 mb-3" size={24} />
+                            <span className="text-white text-3xl font-black">
+                                {allMatches.filter(m => activeModality === 'doubles' ? m.isDoubles : !m.isDoubles).length}
+                            </span>
+                            <span className="text-gray-500 text-[10px] font-bold uppercase mt-1">{t('admin.tournaments.matchesScheduled')}</span>
+                        </div>
+                        <div className="glass p-6 rounded-3xl flex flex-col col-span-2 items-center justify-center text-center border-tennis-green/20">
+                            <div className="flex items-center gap-2 text-tennis-green mb-1">
+                                <CheckCircle size={16} />
+                                <span className="text-[10px] font-black uppercase tracking-widest">{t('admin.tournaments.readyDraw')}</span>
+                            </div>
+                            <p className="text-gray-400 text-xs font-medium">{t('admin.tournaments.allOperational')}</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -370,263 +420,276 @@ const TournamentDetailPage = () => {
             </div>
 
             {/* Modal: Communication Center */}
-            {showCommModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowCommModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.notifications.blastMsg')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.notifications.notifyCount', { count: players.length })}</p>
+            {
+                showCommModal && (
+                    <>
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowCommModal(false)}></div>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                            <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.notifications.blastMsg')}</h2>
+                                        <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.notifications.notifyCount', { count: players.length })}</p>
+                                    </div>
+                                    <button onClick={() => setShowCommModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                        <X size={24} />
+                                    </button>
                                 </div>
-                                <button onClick={() => setShowCommModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
-                            </div>
 
-                            <div className="space-y-6">
-                                <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputTitle')}</label>
-                                    <input
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-orange-500/50"
-                                        placeholder={t('admin.notifications.phTitle')}
-                                        value={commTitle}
-                                        onChange={e => setCommTitle(e.target.value)}
-                                    />
+                                <div className="space-y-6">
+                                    <div className="space-y-4">
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputTitle')}</label>
+                                        <input
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-orange-500/50"
+                                            placeholder={t('admin.notifications.phTitle')}
+                                            value={commTitle}
+                                            onChange={e => setCommTitle(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-4">
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputBody')}</label>
+                                        <textarea
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-medium focus:outline-none focus:border-orange-500/50 min-h-[120px] resize-none"
+                                            placeholder={t('admin.notifications.phBody')}
+                                            value={commBody}
+                                            onChange={e => setCommBody(e.target.value)}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleSendComm}
+                                        disabled={sending || !commTitle.trim() || !commBody.trim()}
+                                        className="w-full bg-orange-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-orange-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                    >
+                                        {sending ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-white"></div> : <Flag size={24} />}
+                                        {t('admin.notifications.sendBlast')}
+                                    </button>
                                 </div>
-                                <div className="space-y-4">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.notifications.inputBody')}</label>
-                                    <textarea
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-medium focus:outline-none focus:border-orange-500/50 min-h-[120px] resize-none"
-                                        placeholder={t('admin.notifications.phBody')}
-                                        value={commBody}
-                                        onChange={e => setCommBody(e.target.value)}
-                                    />
-                                </div>
-                                <button
-                                    onClick={handleSendComm}
-                                    disabled={sending || !commTitle.trim() || !commBody.trim()}
-                                    className="w-full bg-orange-500 text-white py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-orange-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                                >
-                                    {sending ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-white"></div> : <Flag size={24} />}
-                                    {t('admin.notifications.sendBlast')}
-                                </button>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
+                    </>
+                )
+            }
 
             {/* Modal: Scoring Config */}
-            {showScoringModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowScoringModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.scoring.rewardStrategy')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.scoring.overrides')}</p>
+            {
+                showScoringModal && (
+                    <>
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowScoringModal(false)}></div>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                            <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.scoring.rewardStrategy')}</h2>
+                                        <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.scoring.overrides')}</p>
+                                    </div>
+                                    <button onClick={() => setShowScoringModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                        <X size={24} />
+                                    </button>
                                 </div>
-                                <button onClick={() => setShowScoringModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
-                            </div>
 
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 gap-6">
-                                    <div className="space-y-4">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsWin')}</label>
-                                        <input
-                                            type="number"
-                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
-                                            value={localScoring.win}
-                                            onChange={e => setLocalScoring({ ...localScoring, win: Number(e.target.value) })}
-                                        />
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 gap-6">
+                                        <div className="space-y-4">
+                                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsWin')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
+                                                value={localScoring.win}
+                                                onChange={e => setLocalScoring({ ...localScoring, win: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsLoss')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
+                                                value={localScoring.loss}
+                                                onChange={e => setLocalScoring({ ...localScoring, loss: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsWithdraw')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
+                                                value={localScoring.withdraw}
+                                                onChange={e => setLocalScoring({ ...localScoring, withdraw: Number(e.target.value) })}
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="space-y-4">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsLoss')}</label>
-                                        <input
-                                            type="number"
-                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
-                                            value={localScoring.loss}
-                                            onChange={e => setLocalScoring({ ...localScoring, loss: Number(e.target.value) })}
-                                        />
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.scoring.pointsWithdraw')}</label>
-                                        <input
-                                            type="number"
-                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-black text-2xl focus:outline-none focus:border-tennis-green/50"
-                                            value={localScoring.withdraw}
-                                            onChange={e => setLocalScoring({ ...localScoring, withdraw: Number(e.target.value) })}
-                                        />
-                                    </div>
+                                    <button
+                                        onClick={handleSaveScoring}
+                                        disabled={updating}
+                                        className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                    >
+                                        {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
+                                        {t('admin.tournaments.scoring.apply')}
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={handleSaveScoring}
-                                    disabled={updating}
-                                    className="w-full bg-tennis-green text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                                >
-                                    {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
-                                    {t('admin.tournaments.scoring.apply')}
-                                </button>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
+                    </>
+                )
+            }
 
             {/* Modal: Chat Settings */}
-            {showChatModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowChatModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.chat.title')}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.chat.subtitle')}</p>
-                                </div>
-                                <button onClick={() => setShowChatModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
-                                </button>
-                            </div>
-
-                            <div className="space-y-6">
-                                {/* Toggle: Enable Chat */}
-                                <div
-                                    onClick={() => setChatEnabled(!chatEnabled)}
-                                    className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${chatEnabled ? 'bg-tennis-green/10 border-tennis-green' : 'bg-white/5 border-white/10'}`}
-                                >
+            {
+                showChatModal && (
+                    <>
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowChatModal(false)}></div>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                            <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                                <div className="flex justify-between items-center">
                                     <div>
-                                        <h3 className={`font-bold ${chatEnabled ? 'text-tennis-green' : 'text-gray-400'}`}>{t('admin.tournaments.chat.enableLobby')}</h3>
-                                        <p className="text-gray-500 text-xs mt-1">{t('admin.tournaments.chat.enableLobbyDesc')}</p>
+                                        <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.chat.title')}</h2>
+                                        <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.chat.subtitle')}</p>
                                     </div>
-                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors ${chatEnabled ? 'bg-tennis-green' : 'bg-gray-600'}`}>
-                                        <div className={`w-4 h-4 rounded-full bg-black shadow-md transform transition-transform ${chatEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                    </div>
+                                    <button onClick={() => setShowChatModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                        <X size={24} />
+                                    </button>
                                 </div>
 
-                                {/* Toggle: Read Only */}
-                                <div
-                                    onClick={() => setChatReadOnly(!chatReadOnly)}
-                                    className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${chatReadOnly ? 'bg-orange-500/10 border-orange-500' : 'bg-white/5 border-white/10'}`}
-                                >
-                                    <div>
-                                        <h3 className={`font-bold ${chatReadOnly ? 'text-orange-500' : 'text-gray-400'}`}>{t('admin.tournaments.chat.readOnly')}</h3>
-                                        <p className="text-gray-500 text-xs mt-1">{t('admin.tournaments.chat.readOnlyDesc')}</p>
+                                <div className="space-y-6">
+                                    {/* Toggle: Enable Chat */}
+                                    <div
+                                        onClick={() => setChatEnabled(!chatEnabled)}
+                                        className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${chatEnabled ? 'bg-tennis-green/10 border-tennis-green' : 'bg-white/5 border-white/10'}`}
+                                    >
+                                        <div>
+                                            <h3 className={`font-bold ${chatEnabled ? 'text-tennis-green' : 'text-gray-400'}`}>{t('admin.tournaments.chat.enableLobby')}</h3>
+                                            <p className="text-gray-500 text-xs mt-1">{t('admin.tournaments.chat.enableLobbyDesc')}</p>
+                                        </div>
+                                        <div className={`w-12 h-6 rounded-full p-1 transition-colors ${chatEnabled ? 'bg-tennis-green' : 'bg-gray-600'}`}>
+                                            <div className={`w-4 h-4 rounded-full bg-black shadow-md transform transition-transform ${chatEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                        </div>
                                     </div>
-                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors ${chatReadOnly ? 'bg-orange-500' : 'bg-gray-600'}`}>
-                                        <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${chatReadOnly ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                    </div>
-                                </div>
 
-                                <button
-                                    onClick={handleSaveChatSettings}
-                                    disabled={updating}
-                                    className="w-full bg-white text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 hover:bg-gray-200"
-                                >
-                                    {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
-                                    {t('admin.tournaments.chat.save')}
-                                </button>
+                                    {/* Toggle: Read Only */}
+                                    <div
+                                        onClick={() => setChatReadOnly(!chatReadOnly)}
+                                        className={`p-6 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${chatReadOnly ? 'bg-orange-500/10 border-orange-500' : 'bg-white/5 border-white/10'}`}
+                                    >
+                                        <div>
+                                            <h3 className={`font-bold ${chatReadOnly ? 'text-orange-500' : 'text-gray-400'}`}>{t('admin.tournaments.chat.readOnly')}</h3>
+                                            <p className="text-gray-500 text-xs mt-1">{t('admin.tournaments.chat.readOnlyDesc')}</p>
+                                        </div>
+                                        <div className={`w-12 h-6 rounded-full p-1 transition-colors ${chatReadOnly ? 'bg-orange-500' : 'bg-gray-600'}`}>
+                                            <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${chatReadOnly ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={handleSaveChatSettings}
+                                        disabled={updating}
+                                        className="w-full bg-white text-tennis-dark py-6 rounded-3xl font-black uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 hover:bg-gray-200"
+                                    >
+                                        {updating ? <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-tennis-dark"></div> : <Save size={24} />}
+                                        {t('admin.tournaments.chat.save')}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
+                    </>
+                )
+            }
 
             {/* Modal: Check-In QR */}
-            {showQRModal && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowQRModal(false)}></div>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                        <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.checkIn.modalTitle') || "Tournament Check-In"}</h2>
-                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.checkIn.modalDesc') || "Scan to check in"}</p>
+            {
+                showQRModal && (
+                    <>
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 transition-opacity" onClick={() => setShowQRModal(false)}></div>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                            <div className="bg-gray-950 border border-white/10 w-full max-w-lg rounded-[40px] p-12 space-y-8 animate-scale-in">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.checkIn.modalTitle') || "Tournament Check-In"}</h2>
+                                        <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.tournaments.checkIn.modalDesc') || "Scan to check in"}</p>
+                                    </div>
+                                    <button onClick={() => setShowQRModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
+                                        <X size={24} />
+                                    </button>
                                 </div>
-                                <button onClick={() => setShowQRModal(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center text-gray-500 transition-all">
-                                    <X size={24} />
+
+                                <div className="flex justify-center items-center flex-col gap-6">
+                                    <div className="p-4 bg-white rounded-3xl">
+                                        <QRCodeCanvas
+                                            value={JSON.stringify({
+                                                type: 'CHECK_IN',
+                                                tournamentId: tournament?.id || '',
+                                                tournamentName: tournament?.name || 'Tournament'
+                                            })}
+                                            size={250}
+                                            level={'H'}
+                                        />
+                                    </div>
+                                    <p className="text-gray-400 text-sm text-center max-w-xs">{t('admin.tournaments.checkIn.instruction') || "Players can scan this code from their app to confirm attendance."}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )
+            }
+
+            {
+                showDeleteModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
+                        <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl transform scale-100 transition-all">
+                            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto text-red-500 mb-2">
+                                <AlertTriangle size={32} />
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="text-white text-2xl font-bold">{t('admin.tournaments.delete')}</h3>
+                                <p className="text-gray-400 leading-relaxed">
+                                    {t('admin.tournaments.deleteConfirm')}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <button
+                                    onClick={() => setShowDeleteModal(false)}
+                                    className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
+                                >
+                                    {t('common.cancel')}
+                                </button>
+                                <button
+                                    onClick={handleConfirmDelete}
+                                    disabled={deleting}
+                                    className="py-4 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {deleting ? (
+                                        <RefreshCw size={20} className="animate-spin" />
+                                    ) : (
+                                        t('admin.tournaments.delete')
+                                    )}
                                 </button>
                             </div>
-
-                            <div className="flex justify-center items-center flex-col gap-6">
-                                <div className="p-4 bg-white rounded-3xl">
-                                    <QRCodeCanvas
-                                        value={JSON.stringify({
-                                            type: 'CHECK_IN',
-                                            tournamentId: tournament?.id || '',
-                                            tournamentName: tournament?.name || 'Tournament'
-                                        })}
-                                        size={250}
-                                        level={'H'}
-                                    />
-                                </div>
-                                <p className="text-gray-400 text-sm text-center max-w-xs">{t('admin.tournaments.checkIn.instruction') || "Players can scan this code from their app to confirm attendance."}</p>
-                            </div>
                         </div>
                     </div>
-                </>
-            )}
-            {showDeleteModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
-                    <div className="glass max-w-md w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl transform scale-100 transition-all">
-                        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto text-red-500 mb-2">
-                            <AlertTriangle size={32} />
-                        </div>
-
-                        <div className="space-y-2">
-                            <h3 className="text-white text-2xl font-bold">{t('admin.tournaments.delete')}</h3>
-                            <p className="text-gray-400 leading-relaxed">
-                                {t('admin.tournaments.deleteConfirm')}
-                            </p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                            <button
-                                onClick={() => setShowDeleteModal(false)}
-                                className="py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-colors"
-                            >
-                                {t('common.cancel')}
-                            </button>
-                            <button
-                                onClick={handleConfirmDelete}
-                                disabled={deleting}
-                                className="py-4 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold transition-colors flex items-center justify-center gap-2"
-                            >
-                                {deleting ? (
-                                    <RefreshCw size={20} className="animate-spin" />
-                                ) : (
-                                    t('admin.tournaments.delete')
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Generic Info/Error Modal */}
-            {infoModal.open && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in">
-                    <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${infoModal.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-tennis-green/10 text-tennis-green'}`}>
-                            {infoModal.type === 'error' ? <AlertTriangle size={32} /> : <CheckCircle size={32} />}
+            {
+                infoModal.open && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-6 animate-fade-in">
+                        <div className="glass max-w-sm w-full p-8 rounded-[32px] border-white/10 text-center space-y-6 shadow-2xl">
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 ${infoModal.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-tennis-green/10 text-tennis-green'}`}>
+                                {infoModal.type === 'error' ? <AlertTriangle size={32} /> : <CheckCircle size={32} />}
+                            </div>
+                            <h3 className="text-white text-xl font-bold">{infoModal.title}</h3>
+                            <p className="text-gray-400">{infoModal.message}</p>
+                            <button
+                                onClick={() => setInfoModal(prev => ({ ...prev, open: false }))}
+                                className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+                            >
+                                {t('common.close')}
+                            </button>
                         </div>
-                        <h3 className="text-white text-xl font-bold">{infoModal.title}</h3>
-                        <p className="text-gray-400">{infoModal.message}</p>
-                        <button
-                            onClick={() => setInfoModal(prev => ({ ...prev, open: false }))}
-                            className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
-                        >
-                            {t('common.close')}
-                        </button>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

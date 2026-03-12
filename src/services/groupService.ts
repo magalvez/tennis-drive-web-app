@@ -17,10 +17,12 @@ export const createGroup = async (
     tournamentId: string,
     groupName: string,
     playerIds: string[],
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ): Promise<void> => {
     try {
-        const docId = category ? `${category}_${groupName}` : groupName;
+        const prefix = isDoubles ? 'doubles' : 'singles';
+        const docId = category ? `${prefix}_${category}_${groupName}` : `${prefix}_${groupName}`;
         const groupRef = doc(db, 'tournaments', tournamentId, 'groups', docId);
 
         const groupData: TournamentGroup = {
@@ -29,6 +31,7 @@ export const createGroup = async (
             playerIds,
             status: 'in_progress',
             qualifiersCount: 2,
+            isDoubles,
             ...(category && { category })
         };
 
@@ -58,10 +61,12 @@ export const finalizeGroup = async (
     tournamentId: string,
     groupName: string,
     qualifiersCount: number,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ) => {
     try {
-        const docId = category ? `${category}_${groupName}` : groupName;
+        const prefix = isDoubles ? 'doubles' : 'singles';
+        const docId = category ? `${prefix}_${category}_${groupName}` : `${prefix}_${groupName}`;
         const groupRef = doc(db, 'tournaments', tournamentId, 'groups', docId);
 
         // In a real app, you'd calculate standings here from match results.
@@ -79,10 +84,12 @@ export const finalizeGroup = async (
 export const unfinalizeGroup = async (
     tournamentId: string,
     groupName: string,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ) => {
     try {
-        const docId = category ? `${category}_${groupName}` : groupName;
+        const prefix = isDoubles ? 'doubles' : 'singles';
+        const docId = category ? `${prefix}_${category}_${groupName}` : `${prefix}_${groupName}`;
         const groupRef = doc(db, 'tournaments', tournamentId, 'groups', docId);
         await updateDoc(groupRef, {
             status: 'in_progress'
@@ -93,24 +100,32 @@ export const unfinalizeGroup = async (
     }
 };
 
-export const getTournamentStandings = async (tournamentId: string, category?: TournamentCategory): Promise<GroupStanding[]> => {
+export const getTournamentStandings = async (tournamentId: string, category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles'): Promise<GroupStanding[]> => {
     try {
-        const [matches, players, tournament] = await Promise.all([
+        const isDoubles = modality === 'doubles';
+        const [matches, tournament] = await Promise.all([
             getTournamentMatches(tournamentId),
-            getTournamentPlayers(tournamentId),
             getTournamentById(tournamentId)
         ]);
 
-        const scoringConfig = tournament?.scoringConfig || { win: 50, loss: 10, withdraw: 5 };
+        let items: any[] = [];
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            items = await getDoublesTeams(tournamentId);
+        } else {
+            items = await getTournamentPlayers(tournamentId);
+        }
+
+        const scoringConfig = tournament?.scoringConfig || { win: 3, loss: 0, withdraw: 0 };
         const standings: { [pid: string]: GroupStanding } = {};
 
         // Initialize
-        players.filter((p: any) => p.group && (!category || p.category === category)).forEach((p: any) => {
-            standings[p.uid] = {
+        items.filter((p: any) => p.group && (!category || p.category === category)).forEach((p: any) => {
+            standings[p.id] = {
                 position: 0,
                 playerId: p.id,
-                playerName: p.name,
-                uid: p.uid,
+                playerName: isDoubles ? p.teamName : p.name,
+                uid: isDoubles ? p.player1Uid : p.uid,
                 points: 0,
                 wins: 0,
                 losses: 0,
@@ -121,9 +136,14 @@ export const getTournamentStandings = async (tournamentId: string, category?: To
         });
 
         // Calculate
-        matches.filter((m: any) => m.status === 'completed' && m.group && (!category || m.category === category)).forEach((m: any) => {
-            const winner = m.winnerId;
-            const loser = winner === m.player1Uid ? m.player2Uid : m.player1Uid;
+        matches.filter((m: any) => m.status === 'completed' && m.group && (!category || m.category === category) && !!m.isDoubles === isDoubles).forEach((m: any) => {
+            const winner = m.winnerId || m.winnerTeamId;
+            const loser = isDoubles
+                ? (winner === m.team1Id ? m.team2Id : m.team1Id)
+                : (winner === m.player1Uid ? m.player2Uid : m.player1Uid);
+
+            // Check if loser is manual (for singles)
+            const actualLoserId = !isDoubles ? items.find(p => p.uid === loser)?.id : loser;
 
             if (standings[winner]) {
                 standings[winner].wins++;
@@ -131,10 +151,10 @@ export const getTournamentStandings = async (tournamentId: string, category?: To
                 standings[winner].points += scoringConfig.win;
             }
 
-            if (standings[loser]) {
-                standings[loser].losses++;
-                standings[loser].played = (standings[loser].played || 0) + 1;
-                standings[loser].points += m.isWithdrawal ? scoringConfig.withdraw : scoringConfig.loss;
+            if (actualLoserId && standings[actualLoserId]) {
+                standings[actualLoserId].losses++;
+                standings[actualLoserId].played = (standings[actualLoserId].played || 0) + 1;
+                standings[actualLoserId].points += m.isWithdrawal ? scoringConfig.withdraw : scoringConfig.loss;
             }
         });
 
@@ -163,13 +183,15 @@ export const areAllGroupsFinalized = async (tournamentId: string, category?: Tou
 
 export const getQualifiedPlayers = async (
     tournamentId: string,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    modality: 'singles' | 'doubles' = 'singles'
 ): Promise<{ id: string; uid: string; name: string; groupName: string; position: number }[]> => {
     try {
+        const isDoubles = modality === 'doubles';
         const groups = await getGroups(tournamentId);
-        const finalizedGroups = groups.filter(g => g.status === 'completed' && (!category || g.category === category));
+        const finalizedGroups = groups.filter(g => g.status === 'completed' && (!category || g.category === category) && !!g.isDoubles === isDoubles);
 
-        const standings = await getTournamentStandings(tournamentId, category);
+        const standings = await getTournamentStandings(tournamentId, category, modality);
 
         let qualified: { id: string; uid: string; name: string; groupName: string; position: number }[] = [];
         finalizedGroups.forEach(g => {
@@ -198,55 +220,86 @@ export const addPlayerToGroup = async (
     tournamentId: string,
     groupName: string,
     playerId: string,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ): Promise<{ matchesCreated: number }> => {
     try {
-        // Get the player being added
-        const allPlayers = await getTournamentPlayers(tournamentId);
-        const player = allPlayers.find(p => p.id === playerId);
+        const tournament = await getTournamentById(tournamentId);
+        const sport = tournament?.sport;
+
+        let player: any;
+        let allItems: any[];
+
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            allItems = await getDoublesTeams(tournamentId);
+            player = allItems.find(t => t.id === playerId);
+        } else {
+            allItems = await getTournamentPlayers(tournamentId);
+            player = allItems.find(p => p.id === playerId);
+        }
 
         if (!player) {
-            throw new Error('Player not found');
+            throw new Error('Item not found');
         }
 
         // Update player's group field
-        const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
-        await updateDoc(playerRef, { group: groupName });
+        const itemRef = doc(db, 'tournaments', tournamentId, isDoubles ? 'doublesTeams' : 'players', playerId);
+        await updateDoc(itemRef, { group: groupName });
 
         // Update group's playerIds array
-        const docId = category ? `${category}_${groupName}` : groupName;
+        const prefix = isDoubles ? 'doubles' : 'singles';
+        const docId = category ? `${prefix}_${category}_${groupName}` : `${prefix}_${groupName}`;
         const groupRef = doc(db, 'tournaments', tournamentId, 'groups', docId);
         await updateDoc(groupRef, {
             playerIds: arrayUnion(playerId)
         });
 
         // Get existing group members (excluding the new player)
-        const groupPlayers = allPlayers.filter(p =>
+        const groupItems = allItems.filter(p =>
             p.group === groupName &&
             p.id !== playerId &&
-            (category ? p.category?.toLowerCase() === category.toLowerCase() : true)
+            (category ? p.category === category : true)
         );
 
         // Create matches with each existing group member
         const matchesCollection = collection(db, 'tournaments', tournamentId, 'matches');
         let matchesCreated = 0;
 
-        for (const opponent of groupPlayers) {
-            await addDoc(matchesCollection, {
-                player1Name: player.name,
-                player1Uid: player.uid,
-                player2Name: opponent.name,
-                player2Uid: opponent.uid,
+        for (const opponent of groupItems) {
+            const matchData: any = {
                 status: 'scheduled',
                 tournamentId: tournamentId,
                 type: 'tournament',
                 group: groupName,
-                category: category // Add category to matches
-            });
+                category: category,
+                sport,
+                isDoubles
+            };
+
+            if (isDoubles) {
+                matchData.team1Id = player.id;
+                matchData.team1Name = player.teamName;
+                matchData.team1Seed = player.seed;
+                matchData.team2Id = opponent.id;
+                matchData.team2Name = opponent.teamName;
+                matchData.team2Seed = opponent.seed;
+                matchData.player1Uid = player.player1Uid;
+                matchData.player2Uid = opponent.player1Uid;
+            } else {
+                matchData.player1Name = player.name;
+                matchData.player1Uid = player.uid;
+                matchData.player1Seed = player.seed;
+                matchData.player2Name = opponent.name;
+                matchData.player2Uid = opponent.uid;
+                matchData.player2Seed = opponent.seed;
+            }
+
+            await addDoc(matchesCollection, matchData);
             matchesCreated++;
         }
 
-        console.log(`[Groups] Added ${player.name} to group ${groupName} (ID: ${docId}), created ${matchesCreated} matches`);
+        console.log(`[Groups] Added ${isDoubles ? player.teamName : player.name} to group ${groupName}, created ${matchesCreated} matches`);
         return { matchesCreated };
     } catch (error) {
         console.error('Error adding player to group:', error);
@@ -261,29 +314,39 @@ export const removePlayerFromGroup = async (
     tournamentId: string,
     groupName: string,
     playerId: string,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ): Promise<{ matchesDeleted: number }> => {
     try {
-        // Get the player being removed
-        const allPlayers = await getTournamentPlayers(tournamentId);
-        const player = allPlayers.find(p => p.id === playerId);
-
-        if (!player) {
-            throw new Error('Player not found');
+        let item: any;
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            const teams = await getDoublesTeams(tournamentId);
+            item = teams.find(t => t.id === playerId);
+        } else {
+            const players = await getTournamentPlayers(tournamentId);
+            item = players.find(p => p.id === playerId);
         }
 
-        // Remove player's group field
-        const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
-        await updateDoc(playerRef, { group: null });
+        if (!item) {
+            throw new Error(isDoubles ? 'Team not found' : 'Player not found');
+        }
+
+        // Remove item's group field
+        const itemRef = isDoubles
+            ? doc(db, 'tournaments', tournamentId, 'doublesTeams', playerId)
+            : doc(db, 'tournaments', tournamentId, 'players', playerId);
+        await updateDoc(itemRef, { group: null });
 
         // Update group's playerIds array
-        const docId = category ? `${category}_${groupName}` : groupName;
+        const prefix = isDoubles ? 'doubles' : 'singles';
+        const docId = category ? `${prefix}_${category}_${groupName}` : `${prefix}_${groupName}`;
         const groupRef = doc(db, 'tournaments', tournamentId, 'groups', docId);
         await updateDoc(groupRef, {
             playerIds: arrayRemove(playerId)
         });
 
-        // Find and delete all matches involving this player in this group
+        // Find and delete all matches involving this item in this group
         const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
         const matchesSnapshot = await getDocs(matchesRef);
 
@@ -291,20 +354,28 @@ export const removePlayerFromGroup = async (
 
         for (const matchDoc of matchesSnapshot.docs) {
             const match = matchDoc.data();
-            // Only delete if match is in this group AND involves this player
-            // AND matches the category if provided
-            if (match.group === groupName &&
-                (match.player1Uid === player.uid || match.player2Uid === player.uid) &&
-                (category ? match.category === category : true)) {
-                await deleteDoc(matchDoc.ref);
-                matchesDeleted++;
+            const isInGroup = match.group === groupName && (category ? match.category === category : true);
+            const isMatchDoubles = !!match.isDoubles;
+
+            if (isInGroup && isMatchDoubles === isDoubles) {
+                if (isDoubles) {
+                    if (match.team1Id === playerId || match.team2Id === playerId) {
+                        await deleteDoc(matchDoc.ref);
+                        matchesDeleted++;
+                    }
+                } else {
+                    if (match.player1Uid === item.uid || match.player2Uid === item.uid) {
+                        await deleteDoc(matchDoc.ref);
+                        matchesDeleted++;
+                    }
+                }
             }
         }
 
-        console.log(`[Groups] Removed ${player.name} from group ${groupName} (ID: ${docId}), deleted ${matchesDeleted} matches`);
+        console.log(`[Groups] Removed ${isDoubles ? item.teamName : item.name} from group ${groupName}, deleted ${matchesDeleted} matches`);
         return { matchesDeleted };
     } catch (error) {
-        console.error('Error removing player from group:', error);
+        console.error('Error removing player/team from group:', error);
         throw error;
     }
 };
@@ -314,14 +385,26 @@ export const removePlayerFromGroup = async (
  */
 export const getPlayersWithoutGroup = async (
     tournamentId: string,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ): Promise<{ id: string; name: string; uid: string }[]> => {
     try {
-        const players = await getTournamentPlayers(tournamentId);
+        let items: any[];
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            items = await getDoublesTeams(tournamentId);
+        } else {
+            items = await getTournamentPlayers(tournamentId);
+        }
 
-        return players
-            .filter(p => !p.group && (category ? p.category?.toLowerCase() === category.toLowerCase() : true))
-            .map(p => ({ id: p.id, name: p.name, uid: p.uid, category: p.category }));
+        return items
+            .filter(p => !p.group && (category ? p.category === category : true))
+            .map(p => ({
+                id: p.id,
+                name: isDoubles ? (p.teamName || `${p.player1Name} / ${p.player2Name}`) : p.name,
+                uid: isDoubles ? p.player1Uid : p.uid,
+                category: p.category
+            }));
     } catch (error) {
         console.error('Error getting players without group:', error);
         return [];
@@ -334,17 +417,29 @@ export const getPlayersWithoutGroup = async (
 export const getGroupPlayers = async (
     tournamentId: string,
     groupName: string,
-    category?: TournamentCategory
+    category?: TournamentCategory,
+    isDoubles: boolean = false
 ): Promise<{ id: string; name: string; uid: string }[]> => {
     try {
-        const players = await getTournamentPlayers(tournamentId);
+        let items: any[];
+        if (isDoubles) {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            items = await getDoublesTeams(tournamentId);
+        } else {
+            items = await getTournamentPlayers(tournamentId);
+        }
 
-        return players
+        return items
             .filter(p =>
                 p.group === groupName &&
-                (category ? p.category?.toLowerCase() === category.toLowerCase() : true)
+                (category ? p.category === category : true)
             )
-            .map(p => ({ id: p.id, name: p.name, uid: p.uid, category: p.category }));
+            .map(p => ({
+                id: p.id,
+                name: isDoubles ? (p.teamName || `${p.player1Name} / ${p.player2Name}`) : p.name,
+                uid: isDoubles ? p.player1Uid : p.uid,
+                category: p.category
+            }));
     } catch (error) {
         console.error('Error getting group players:', error);
         return [];

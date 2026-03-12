@@ -16,7 +16,9 @@ export interface TransactionInput {
     paymentMethod?: string;
     status?: 'pending' | 'completed';
     tournamentPlayerId?: string;
+    doublesTeamId?: string;
     clubId?: string;
+    note?: string;
 }
 
 export const createTransaction = async (data: TransactionInput) => {
@@ -27,6 +29,7 @@ export const createTransaction = async (data: TransactionInput) => {
             status: data.status || 'pending',
             paymentMethod: data.paymentMethod || 'manual',
             tournamentPlayerId: data.tournamentPlayerId || null,
+            doublesTeamId: data.doublesTeamId || null,
             createdAt: serverTimestamp()
         };
 
@@ -46,21 +49,24 @@ export const createTransaction = async (data: TransactionInput) => {
     }
 };
 
-export const completeTransaction = async (transactionId: string, gatewayRef?: string, paymentMethod?: string) => {
+export const completeTransaction = async (transactionId: string, gatewayRef?: string, paymentMethod?: string, metadata?: any) => {
     try {
         const docRef = doc(db, TRANSACTIONS_COLLECTION, transactionId);
-        await updateDoc(docRef, {
+        const updateData: any = {
             status: 'completed',
             gatewayRef: gatewayRef || 'manual',
             paymentMethod: paymentMethod || 'manual',
             completedAt: serverTimestamp()
-        });
+        };
+        if (metadata?.note) updateData.note = metadata.note;
+
+        await updateDoc(docRef, updateData);
 
         const snap = await getDoc(docRef);
         if (snap.exists()) {
             const data = snap.data();
             if (data.type === 'entry_fee' && data.referenceId) {
-                await markTournamentPlayerPaid(data.referenceId, data.userId, data.tournamentPlayerId);
+                await markTournamentPlayerPaid(data.referenceId, data.userId, data.tournamentPlayerId, data.doublesTeamId);
             }
 
             await logActivity(
@@ -78,17 +84,29 @@ export const completeTransaction = async (transactionId: string, gatewayRef?: st
     }
 };
 
-export const markTournamentPlayerPaid = async (tournamentId: string, userId: string, playerId?: string) => {
+export const markTournamentPlayerPaid = async (tournamentId: string, userId: string, playerId?: string, doublesTeamId?: string) => {
     try {
-        if (playerId) {
-            const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
-            await updateDoc(playerRef, {
+        if (doublesTeamId) {
+            const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', doublesTeamId);
+            await updateDoc(teamRef, {
                 paymentStatus: 'paid',
-                paidAt: serverTimestamp()
+                paidAt: serverTimestamp(),
+                status: 'approved' // Auto-approve on payment
             });
             return;
         }
 
+        if (playerId) {
+            const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
+            await updateDoc(playerRef, {
+                paymentStatus: 'paid',
+                paidAt: serverTimestamp(),
+                registrationStatus: 'approved' // Auto-approve on payment
+            });
+            return;
+        }
+
+        // Fallback for UID-based matching
         const playersRef = collection(db, 'tournaments', tournamentId, 'players');
         const q = query(playersRef, where('uid', '==', userId));
         const snapshot = await getDocs(q);
@@ -97,7 +115,8 @@ export const markTournamentPlayerPaid = async (tournamentId: string, userId: str
             const playerDoc = snapshot.docs[0];
             await updateDoc(playerDoc.ref, {
                 paymentStatus: 'paid',
-                paidAt: serverTimestamp()
+                paidAt: serverTimestamp(),
+                registrationStatus: 'approved'
             });
         }
     } catch (error) {

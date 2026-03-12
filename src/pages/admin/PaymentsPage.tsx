@@ -4,12 +4,17 @@ import {
     RefreshCw,
     Repeat,
     TrendingUp,
-    RotateCcw
+    RotateCcw,
+    Settings,
+    Trash2,
+    X,
+    CreditCard
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getAllTransactions, revertTransaction } from '../../services/paymentService';
+import { getClubById, updateClub, deleteClubEpaycoConfig } from '../../services/clubService';
 import type { Transaction } from '../../services/types';
 
 const PaymentsPage = () => {
@@ -20,12 +25,26 @@ const PaymentsPage = () => {
     const [processing, setProcessing] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'pending' | 'refunded' | 'failed'>('all');
 
+    // Epayco Config State
+    const [isConfigModalVisible, setIsConfigModalVisible] = useState(false);
+    const [epaycoPublicKey, setEpaycoPublicKey] = useState('');
+    const [epaycoTestMode, setEpaycoTestMode] = useState(true);
+    const [originalPublicKey, setOriginalPublicKey] = useState('');
+    const [savingConfig, setSavingConfig] = useState(false);
+
     const loadData = useCallback(async () => {
         if (!managedClubId) return;
         setLoading(true);
         try {
             const data = await getAllTransactions(managedClubId);
             setTransactions(data);
+
+            const club = await getClubById(managedClubId);
+            if (club?.epaycoConfig) {
+                setOriginalPublicKey(club.epaycoConfig.publicKey);
+                setEpaycoPublicKey('*********');
+                setEpaycoTestMode(club.epaycoConfig.testMode);
+            }
         } catch (error) {
             console.error(error);
         } finally {
@@ -47,6 +66,48 @@ const PaymentsPage = () => {
             alert(t('common.error'));
         } finally {
             setProcessing(null);
+        }
+    };
+
+    const handleSaveConfig = async () => {
+        if (!managedClubId) return;
+        setSavingConfig(true);
+        try {
+            const publicKeyToSave = epaycoPublicKey === '*********' ? originalPublicKey : epaycoPublicKey;
+            await updateClub(managedClubId, {
+                epaycoConfig: {
+                    publicKey: publicKeyToSave,
+                    testMode: epaycoTestMode
+                }
+            });
+            setOriginalPublicKey(publicKeyToSave);
+            setEpaycoPublicKey('*********');
+            alert(t('admin.payments.saveSuccess') || "Config saved successfully");
+            setIsConfigModalVisible(false);
+        } catch (error) {
+            console.error("Error saving config:", error);
+            alert(t('admin.payments.saveError') || "Error saving config");
+        } finally {
+            setSavingConfig(false);
+        }
+    };
+
+    const handleDeleteConfig = async () => {
+        if (!window.confirm(t('admin.payments.deleteConfigConfirm') || "Are you sure you want to delete payment configuration?")) return;
+        if (!managedClubId) return;
+        setSavingConfig(true);
+        try {
+            await deleteClubEpaycoConfig(managedClubId);
+            setOriginalPublicKey('');
+            setEpaycoPublicKey('');
+            setEpaycoTestMode(true);
+            setIsConfigModalVisible(false);
+            alert(t('admin.payments.deleteSuccess') || "Config deleted successfully");
+        } catch (error) {
+            console.error("Error deleting config:", error);
+            alert(t('admin.payments.deleteError') || "Error deleting config");
+        } finally {
+            setSavingConfig(false);
         }
     };
 
@@ -83,6 +144,12 @@ const PaymentsPage = () => {
                     <h1 className="text-white text-4xl font-extrabold uppercase tracking-tight">{t('admin.payments.title')}</h1>
                     <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{t('admin.payments.subtitle')}</p>
                 </div>
+                <button
+                    onClick={() => setIsConfigModalVisible(true)}
+                    className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-all shadow-xl"
+                >
+                    <Settings size={22} />
+                </button>
             </div>
 
             {/* Stats Overview */}
@@ -198,6 +265,75 @@ const PaymentsPage = () => {
                     ))
                 )}
             </div>
+
+            {/* Config Modal */}
+            {isConfigModalVisible && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+                    <div className="bg-gray-900 border border-white/10 rounded-[40px] w-full max-w-xl p-10 space-y-8 animate-in fade-in zoom-in duration-300">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.payments.configTitle')}</h2>
+                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">{t('admin.payments.integrateGateway')}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                {originalPublicKey && (
+                                    <button
+                                        onClick={handleDeleteConfig}
+                                        className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 hover:bg-red-500/20 transition-all"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setIsConfigModalVisible(false)}
+                                    className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.payments.publicKey')}</label>
+                                <input
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold focus:outline-none focus:border-white/20 transition-all"
+                                    placeholder={t('admin.payments.publicKeyPlaceholder')}
+                                    value={epaycoPublicKey}
+                                    onChange={e => setEpaycoPublicKey(e.target.value)}
+                                />
+                                <p className="text-gray-600 text-[10px] font-medium leading-relaxed italic ml-1">{t('admin.payments.publicKeyHint')}</p>
+                            </div>
+
+                            <div className="flex items-center justify-between p-6 rounded-3xl bg-white/5 border border-white/5">
+                                <div className="space-y-1">
+                                    <p className="text-white font-bold text-sm">{t('admin.payments.testMode')}</p>
+                                    <p className="text-gray-500 text-xs font-medium">{t('admin.payments.testModeHint')}</p>
+                                </div>
+                                <button
+                                    onClick={() => setEpaycoTestMode(!epaycoTestMode)}
+                                    className={`w-14 h-8 rounded-full transition-all relative flex items-center px-1 ${epaycoTestMode ? 'bg-tennis-green' : 'bg-gray-700'}`}
+                                >
+                                    <div className={`w-6 h-6 rounded-full bg-white shadow-sm transition-all transform ${epaycoTestMode ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleSaveConfig}
+                            disabled={savingConfig || !epaycoPublicKey.trim()}
+                            className="w-full py-6 rounded-3xl bg-tennis-green text-tennis-dark font-black uppercase tracking-widest shadow-2xl shadow-tennis-green/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                        >
+                            {savingConfig ? <RefreshCw className="animate-spin" size={24} /> : (
+                                <>
+                                    <CreditCard size={24} />
+                                    {t('admin.payments.saveConfig')}
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
