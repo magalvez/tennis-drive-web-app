@@ -55,7 +55,7 @@ const ManagerLayout = () => {
                         </div>
                         {isSidebarOpen && (
                             <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
-                                TennisDrive <span className="text-tennis-green">Manager</span>
+                                Play On Court <span className="text-tennis-green">Manager</span>
                             </span>
                         )}
                     </div>

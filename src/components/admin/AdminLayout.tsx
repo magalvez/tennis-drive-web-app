@@ -55,7 +55,7 @@ const AdminLayout = () => {
                         </div>
                         {isSidebarOpen && (
                             <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
-                                TennisDrive <span className="text-tennis-green">Admin</span>
+                                Play On Court <span className="text-tennis-green">Admin</span>
                             </span>
                         )}
                     </div>

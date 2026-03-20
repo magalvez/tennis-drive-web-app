@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useLanguage } from '../../context/LanguageContext';
 import { Link } from 'react-router-dom';
 
@@ -49,7 +49,7 @@ export default function MarketingPage() {
 
       {/* Footer */}
       <footer className="border-t border-white/10 py-12 mt-20 text-center text-gray-500">
-        <p>© 2026 TennisDrive. {t('public.marketing.footer')}</p>
+        <p>© 2026 Play On Court. {t('public.marketing.footer')}</p>
         <div className="mt-4 flex justify-center gap-6">
           <Link to="/support" className="hover:text-tennis-green transition-colors">{t('public.support.title')}</Link>
         </div>
