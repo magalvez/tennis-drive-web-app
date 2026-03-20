@@ -16,8 +16,13 @@ const LoginPage = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (!isLoading && user && role === 'admin') {
-            navigate('/admin');
+        if (!isLoading && user && role) {
+            if (role === 'admin') navigate('/admin');
+            else if (role === 'manager') navigate('/manager');
+            else if (role === 'player') {
+                setError(t('auth.noWebAccess') || 'Players must use the mobile app to access the platform.');
+                // Optional: logout if you don't want them persistent here
+            }
         }
     }, [user, role, isLoading, navigate]);
 
@@ -28,8 +33,7 @@ const LoginPage = () => {
 
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // AuthContext listener will redirect to dashboard via App.tsx if role is admin
-            navigate('/admin');
+            // Redirection is handled by the useEffect above once AuthContext updates
         } catch (err: any) {
             console.error(err);
             setError(t('auth.loginError'));

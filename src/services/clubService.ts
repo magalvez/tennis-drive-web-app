@@ -14,6 +14,13 @@ export interface ClubData {
     adminUid: string;
     createdAt: Timestamp;
     logoUrl?: string;
+    status: 'active' | 'inactive';
+    subscriptionPlan: 'monthly' | 'pay_per_tournament';
+    planFees: {
+        monthlyFee: number;
+        playerFeeSingles: number;
+        playerFeeDoubles: number;
+    };
     scoringConfig?: ScoringConfig;
     epaycoConfig?: {
         publicKey: string;

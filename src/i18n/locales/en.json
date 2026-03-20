@@ -79,7 +79,8 @@
         "hasAccount": "Already have an account?",
         "google": "Continue with Google",
         "apple": "Continue with Apple",
-        "loginError": "Invalid email or password"
+        "loginError": "Invalid email or password",
+        "noWebAccess": "Players must use the mobile app. This panel is for Administrators and Managers only."
     },
     "profile": {
         "title": "Profile",
@@ -516,8 +517,6 @@
             "edit": {
                 "title": "Edit Tournament",
                 "subtitle": "Refine Event Details",
-                "name": "Tournament Name",
-                "location": "Location",
                 "date": "Start Date",
                 "fee": "Entry Fee ($)",
                 "status": "Event Status",
@@ -552,7 +551,6 @@
             "fee": "Entry Fee ($)",
             "feePh": "0.00",
             "publish": "Publish Tournament",
-            "save": "Save Changes",
             "courtType": "Court Type",
             "courtSurface": "Court Surface",
             "courtTypes": {
@@ -764,5 +762,229 @@
         "friendlyChallenge": "Friendly Challenge",
         "won": "WON",
         "lost": "LOST"
+    },
+    "manager": {
+        "dashboard": {
+            "title": "Manager Dashboard",
+            "subtitle": "Global platform overview and metrics.",
+            "activeClubs": "Active Clubs",
+            "registeredClubs": "Registered clubs",
+            "totalRevenue": "Total Revenue",
+            "copTotal": "COP total",
+            "pendingBilling": "Pending Billing",
+            "toBeCollected": "To be collected",
+            "totalInvoices": "Total Invoices",
+            "lifetimeCount": "Lifetime count",
+            "quickActions": "Quick Actions",
+            "broadcast": "Broadcast",
+            "clubs": "Clubs",
+            "epayco": "EPayco",
+            "platformOverview": "Platform Overview",
+            "sidebarNav": "Use the sidebar to navigate between detailed management modules.",
+            "tools": "Manager Tools"
+        },
+        "settings": {
+            "title": "Global Settings",
+            "subtitle": "Platform-wide configurations and controls.",
+            "epaycoConfig": "EPayco Configuration",
+            "publicKey": "Public Key",
+            "publicKeyPlaceholder": "Public API Key...",
+            "pcustid": "P_CUST_ID_CLIENT",
+            "pcustidPlaceholder": "Customer ID...",
+            "sandboxMode": "Sandbox (Test Mode)",
+            "updateEpayco": "Update EPayco",
+            "systemMaintenance": "System Maintenance",
+            "maintenanceDesc": "Disables all management actions for club admins during system updates.",
+            "highImpact": "High Impact Area",
+            "highImpactDesc": "Changes to these settings take effect for all transactions across the entire platform.",
+            "lastUpdated": "Platform Config • Last updated: %{date} • %{user}",
+            "updateError": "Failed to update configuration",
+            "saveSuccess": "Configuration saved successfully",
+            "saveError": "Failed to save configuration"
+        },
+        "clubs": {
+            "title": "Club Management",
+            "subtitle": "Manage all registered clubs and their status.",
+            "searchPlaceholder": "Search clubs...",
+            "noClubs": "No clubs found.",
+            "statusActive": "Active",
+            "statusInactive": "Inactive",
+            "toggleConfirm": "Are you sure you want to change this club's status?",
+            "toggleSuccess": "Club status updated.",
+            "toggleError": "Failed to update club status.",
+            "name": "Club Name",
+            "location": "Location",
+            "status": "Status",
+            "actions": "Actions",
+            "active": "Active",
+            "inactive": "Inactive",
+            "plan": "Plan"
+        },
+        "plans": {
+            "title": "Subscription Plans",
+            "subtitle": "Manage club fees and manual billing cycles.",
+            "monthlyFee": "Monthly Fee",
+            "singlesFee": "Singles Player Fee",
+            "doublesFee": "Doubles Team Fee",
+            "lastBilled": "Last Billed",
+            "billingTriggered": "Billing cycle triggered successfully.",
+            "billingError": "Failed to trigger billing.",
+            "feesUpdated": "Fees updated successfully.",
+            "updateError": "Failed to update fees.",
+            "triggerLabel": "Trigger Bill",
+            "editFees": "Edit Fees",
+            "clubName": "Club Name",
+            "baseMonthly": "Base Monthly",
+            "perSingles": "Per Singles",
+            "perDoubles": "Per Doubles",
+            "actions": "Actions",
+            "monthly": "Monthly",
+            "singles": "Singles",
+            "doubles": "Doubles",
+            "manualBilling": "Manual Billing",
+            "saveSuccess": "Configuration saved",
+            "saveError": "Failed to save",
+            "triggerSuccess": "Billing triggered",
+            "triggerError": "Failed to trigger billing",
+            "loading": "Loading..."
+        },
+        "tournaments": {
+            "title": "Global Tournaments",
+            "subtitle": "Moderation and removal of offensive or invalid events.",
+            "noTournaments": "No tournaments found.",
+            "blockedLabel": "BLOCKED",
+            "activeLabel": "ACTIVE",
+            "blocked": "Tournament blocked",
+            "unblocked": "Tournament unblocked",
+            "removeTitle": "Remove Tournament",
+            "removeConfirm": "This will hide the tournament from all users. Continue?",
+            "removeError": "Removal failed",
+            "removeSuccess": "Tournament removed",
+            "tournamentName": "Tournament Name",
+            "club": "Club",
+            "date": "Date",
+            "status": "Status",
+            "actions": "Actions",
+            "tournament": "Tournament",
+            "active": "Active",
+            "upcoming": "Upcoming",
+            "completed": "Completed",
+            "confirmBlock": "Block tournament?",
+            "confirmUnblock": "Unblock tournament?",
+            "confirmRemove": "Remove tournament?",
+            "actionError": "Action failed"
+        },
+        "billing": {
+            "title": "Billing History",
+            "subtitle": "Global registry of club fees and payment statuses.",
+            "searchPlaceholder": "Search by club or tournament...",
+            "allStatus": "All Statuses",
+            "paid": "Paid",
+            "pending": "Pending",
+            "club": "Club",
+            "date": "Date",
+            "type": "Type",
+            "amount": "Amount",
+            "status": "Status",
+            "actions": "Actions",
+            "noInvoices": "No invoices found.",
+            "confirmStatusChange": "Change payment status for this invoice?",
+            "markPaid": "Mark as Paid",
+            "markPending": "Mark as Pending",
+            "period": "Period",
+            "tournament": "Tournament"
+        },
+        "notifications": {
+            "title": "Broadcast Center",
+            "subtitle": "Send emergency alerts or targeted announcements to admins.",
+            "targetType": "Recipient Type",
+            "type": {
+                "all": "All",
+                "club": "Club",
+                "individual": "Individual"
+            },
+            "platformWide": "Platform-Wide",
+            "specificClubs": "Specific Clubs",
+            "selectClub": "Select Club",
+            "searchPlayer": "Search Player / Admin",
+            "searchPlaceholder": "Enter email (min. 3 letters)...",
+            "notificationTitle": "Notification Title",
+            "titlePlaceholder": "e.g. System Maintenance Tomorrow",
+            "messageBody": "Message Body",
+            "bodyPlaceholder": "Detail the message here...",
+            "broadcastDesc": "This message will be visible to ALL admins and platform users.",
+            "targetedDesc": "This message will only be visible to the admin of club: %{club}.",
+            "individualDesc": "This message will only be visible to the selected user.",
+            "confirmBroadcast": "Confirm sending this notification to the ENTIRE platform?",
+            "confirmTargeted": "Confirm sending this notification to club %{club}?",
+            "confirmIndividual": "Confirm sending this notification to %{user}?",
+            "sendSuccess": "Notification sent successfully",
+            "sendError": "Failed to send notification",
+            "sending": "Sending...",
+            "sendBroadcast": "Send Global Broadcast",
+            "sendToClub": "Send to Club",
+            "sendToPlayer": "Send to User",
+            "requiredFields": "Title and body are required",
+            "targetedComm": "Targeted Communication",
+            "targetedCommDesc": "Use individual mode for direct technical support or account alerts to specific users."
+        },
+        "chat": {
+            "support": "Technical Support",
+            "noActiveSessions": "No active sessions",
+            "startFirstChat": "Start First Chat",
+            "adminSupport": "Admin Support",
+            "activeSession": "Active Chat Session",
+            "noMessages": "No messages in this conversation",
+            "typePlaceholder": "Type a message...",
+            "selectSession": "Select a Session",
+            "selectSessionDesc": "Choose a chat from the list to view messages or start a new one with a club admin.",
+            "startNewSupport": "Start New Support",
+            "newChat": "New Support Chat",
+            "selectAdmin": "Select a Club to Contact",
+            "searchPlaceholder": "Search clubs or locations...",
+            "noClubs": "No available clubs found",
+            "startChatError": "Failed to start chat"
+        },
+        "layout": {
+            "platformManager": "Platform Manager"
+        }
+    },
+    "public": {
+        "support": {
+            "title": "Help & Support",
+            "description": "How can we help you today? Find answers or get in touch with our team.",
+            "faq": {
+                "title": "Frequent Questions",
+                "desc": "Check out our Help Center in the app for immediate answers to common questions."
+            },
+            "contact": {
+                "title": "Contact Us",
+                "desc": "If you need further assistance, please reach out to our support team.",
+                "button": "Email Support"
+            }
+        },
+        "marketing": {
+            "hero": {
+                "title1": "Elevate Your",
+                "title2": "Game.",
+                "subtitle": "Discover the ultimate platform for Tennis, Padel, and Pickleball. Find matches, book courts, and manage your club all in one place.",
+                "cta": "Get Started Now"
+            },
+            "features": {
+                "1": {
+                    "title": "Find Matches Instantly",
+                    "desc": "Connect with players of your skill level and organize matches with ease."
+                },
+                "2": {
+                    "title": "Compete & Rank Up",
+                    "desc": "Join local tournaments, track your stats, and climb your club's leaderboard."
+                },
+                "3": {
+                    "title": "Club Management",
+                    "desc": "Powerful tools for club owners to manage courts, billing, and members."
+                }
+            },
+            "footer": "All rights reserved."
+        }
     }
 }

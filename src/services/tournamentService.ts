@@ -1,6 +1,7 @@
 import { addDoc, collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, increment, orderBy, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { formatMatchScore } from '../utils/scoring';
+import { calculateTournamentFees } from './managerService';
 import { logActivity } from './activityService';
 import { createGroup } from './groupService';
 import { advanceWinner } from './bracketService';
@@ -17,6 +18,15 @@ export const createTournament = async (data: Omit<TournamentData, 'status' | 'cr
             status: 'upcoming',
             createdAt: Timestamp.now(),
         };
+
+        // Check club status
+        if (data.clubId) {
+            const { getClubById } = await import('./clubService');
+            const club = await getClubById(data.clubId);
+            if (club?.status === 'inactive') {
+                throw new Error("El club se encuentra inactivo. Por favor contacte al administrador.");
+            }
+        }
 
         const docRef = await addDoc(collection(db, "tournaments"), tournamentData);
         await logActivity(
@@ -79,6 +89,15 @@ export const updateTournament = async (id: string, data: Partial<TournamentData>
     try {
         const docRef = doc(db, "tournaments", id);
         await updateDoc(docRef, data);
+
+        // BILLING TRIGGER: If status is set to 'completed', calculate fees
+        if (data.status === 'completed') {
+            try {
+                await calculateTournamentFees(id);
+            } catch (billingError) {
+                console.error("Auto-billing failed:", billingError);
+            }
+        }
     } catch (error) {
         console.error(error);
         throw error;

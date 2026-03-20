@@ -5,7 +5,7 @@ import { auth, db } from '../config/firebase';
 
 interface AuthContextType {
     user: User | null;
-    role: 'admin' | 'player' | null;
+    role: 'admin' | 'player' | 'manager' | null;
     managedClubId: string | null;
     isLoading: boolean;
     logout: () => Promise<void>;
@@ -21,7 +21,7 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [role, setRole] = useState<'admin' | 'player' | null>(null);
+    const [role, setRole] = useState<'admin' | 'player' | 'manager' | null>(null);
     const [managedClubId, setManagedClubId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 

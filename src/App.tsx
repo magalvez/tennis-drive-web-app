@@ -15,6 +15,17 @@ import TournamentListPage from './pages/admin/tournaments/TournamentListPage';
 import TournamentMatchesPage from './pages/admin/tournaments/TournamentMatchesPage';
 import TournamentPlayersPage from './pages/admin/tournaments/TournamentPlayersPage';
 import LoginPage from './pages/LoginPage';
+import ManagerLayout from './components/manager/ManagerLayout';
+import ManagerDashboardPage from './pages/manager/ManagerDashboardPage';
+import ManagerClubsPage from './pages/manager/ManagerClubsPage';
+import ManagerPlansPage from './pages/manager/ManagerPlansPage';
+import ManagerTournamentsPage from './pages/manager/ManagerTournamentsPage';
+import ManagerSettingsPage from './pages/manager/ManagerSettingsPage';
+import ManagerChatPage from './pages/manager/ManagerChatPage';
+import ManagerNotificationsPage from './pages/manager/ManagerNotificationsPage';
+import ManagerBillingPage from './pages/manager/ManagerBillingPage';
+import SupportPage from './pages/public/SupportPage';
+import MarketingPage from './pages/public/MarketingPage';
 
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, role, isLoading } = useAuth();
@@ -34,6 +45,24 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, role, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-tennis-dark">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-tennis-green"></div>
+      </div>
+    );
+  }
+
+  if (!user || role !== 'manager') {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -41,6 +70,8 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route path="/marketing" element={<MarketingPage />} />
             <Route
               path="/admin/*"
               element={
@@ -61,8 +92,26 @@ function App() {
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="users/admins" element={<ManageAdminsPage />} />
               <Route path="config" element={<ConfigPage />} />
-              {/* Future admin routes will go here */}
             </Route>
+
+            <Route
+              path="/manager/*"
+              element={
+                <ProtectedManagerRoute>
+                  <ManagerLayout />
+                </ProtectedManagerRoute>
+              }
+            >
+              <Route index element={<ManagerDashboardPage />} />
+              <Route path="clubs" element={<ManagerClubsPage />} />
+              <Route path="plans" element={<ManagerPlansPage />} />
+              <Route path="billing" element={<ManagerBillingPage />} />
+              <Route path="tournaments" element={<ManagerTournamentsPage />} />
+              <Route path="chat" element={<ManagerChatPage />} />
+              <Route path="notifications" element={<ManagerNotificationsPage />} />
+              <Route path="settings" element={<ManagerSettingsPage />} />
+            </Route>
+
             <Route path="/" element={<Navigate to="/admin" replace />} />
           </Routes>
         </BrowserRouter>

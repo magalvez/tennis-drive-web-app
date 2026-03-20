@@ -89,7 +89,8 @@
         "hasAccount": "¿Ya tienes una cuenta?",
         "google": "Continuar con Google",
         "apple": "Continuar con Apple",
-        "loginError": "Correo o contraseña inválidos"
+        "loginError": "Correo o contraseña inválidos",
+        "noWebAccess": "Los jugadores deben usar la app móvil. Este panel es solo para Administradores y Gestores."
     },
     "profile": {
         "title": "Perfil",
@@ -264,7 +265,7 @@
             "title": "Acciones Rápidas",
             "create": "Crear Torneo",
             "createDesc": "Lanzar una nueva competencia",
-            "schedule": "Programar Partidos",
+            "schedule": "Gestioanr Torneos",
             "scheduleDesc": "Asignar canchas y horarios",
             "alerts": "Alertas y Notificaciones",
             "alertsDesc": "Transmitir a jugadores",
@@ -737,5 +738,229 @@
         "friendlyChallenge": "Desafío Amistoso",
         "won": "GANADO",
         "lost": "PERDIDO"
+    },
+    "manager": {
+        "dashboard": {
+            "title": "Panel de Administrador",
+            "subtitle": "Resumen general y métricas de la plataforma.",
+            "activeClubs": "Clubes Activos",
+            "registeredClubs": "Clubes registrados",
+            "totalRevenue": "Ingresos Totales",
+            "copTotal": "COP total",
+            "pendingBilling": "Facturación Pendiente",
+            "toBeCollected": "Por cobrar",
+            "totalInvoices": "Facturas Totales",
+            "lifetimeCount": "Conteo histórico",
+            "quickActions": "Acciones Rápidas",
+            "broadcast": "Difusión",
+            "clubs": "Clubes",
+            "epayco": "EPayco",
+            "platformOverview": "Vista General de la Plataforma",
+            "sidebarNav": "Usa la barra lateral para navegar entre los módulos de gestión detallados.",
+            "tools": "Herramientas de Gestor"
+        },
+        "settings": {
+            "title": "Configuración Global",
+            "subtitle": "Configuraciones y controles de toda la plataforma.",
+            "epaycoConfig": "Configuración de EPayco",
+            "publicKey": "Clave Pública",
+            "publicKeyPlaceholder": "Clave API Pública...",
+            "pcustid": "P_CUST_ID_CLIENT",
+            "pcustidPlaceholder": "ID de Cliente...",
+            "sandboxMode": "Sandbox (Modo Prueba)",
+            "updateEpayco": "Actualizar EPayco",
+            "systemMaintenance": "Mantenimiento del Sistema",
+            "maintenanceDesc": "Deshabilita todas las acciones de gestión para administradores de clubes durante actualizaciones del sistema.",
+            "highImpact": "Área de Alto Impacto",
+            "highImpactDesc": "Los cambios en estas configuraciones afectan a todas las transacciones en toda la plataforma.",
+            "lastUpdated": "Configuración de Plataforma • Última actualización: %{date} • %{user}",
+            "updateError": "Error al actualizar la configuración",
+            "saveSuccess": "Configuración guardada exitosamente",
+            "saveError": "Error al guardar la configuración"
+        },
+        "clubs": {
+            "title": "Gestión de Clubes",
+            "subtitle": "Administra todos los clubes registrados y su estado.",
+            "searchPlaceholder": "Buscar clubes...",
+            "noClubs": "No se encontraron clubes.",
+            "statusActive": "Activo",
+            "statusInactive": "Inactivo",
+            "toggleConfirm": "¿Estás seguro de que deseas cambiar el estado de este club?",
+            "toggleSuccess": "Estado del club actualizado.",
+            "toggleError": "Error al actualizar el estado del club.",
+            "name": "Nombre del Club",
+            "location": "Ubicación",
+            "status": "Estado",
+            "actions": "Acciones",
+            "active": "Activo",
+            "inactive": "Inactivo",
+            "plan": "Plan"
+        },
+        "plans": {
+            "title": "Planes de Suscripción",
+            "subtitle": "Gestiona tarifas de clubes y ciclos de facturación manual.",
+            "monthlyFee": "Tarifa Mensual",
+            "singlesFee": "Tarifa Jugador Sencillos",
+            "doublesFee": "Tarifa Equipo Dobles",
+            "lastBilled": "Última Facturación",
+            "billingTriggered": "Ciclo de facturación activado exitosamente.",
+            "billingError": "Error al activar la facturación.",
+            "feesUpdated": "Tarifas actualizadas exitosamente.",
+            "updateError": "Error al actualizar las tarifas.",
+            "triggerLabel": "Facturar",
+            "editFees": "Editar Tarifas",
+            "clubName": "Nombre del Club",
+            "baseMonthly": "Base Mensual",
+            "perSingles": "Por Sencillos",
+            "perDoubles": "Por Dobles",
+            "actions": "Acciones",
+            "monthly": "Mensual",
+            "singles": "Sencillos",
+            "doubles": "Dobles",
+            "manualBilling": "Facturación Manual",
+            "saveSuccess": "Configuración guardada",
+            "saveError": "Error al guardar",
+            "triggerSuccess": "Facturación activada",
+            "triggerError": "Error al facturar",
+            "loading": "Cargando..."
+        },
+        "tournaments": {
+            "title": "Torneos Globales",
+            "subtitle": "Moderación y eliminación de eventos ofensivos o inválidos.",
+            "noTournaments": "No se encontraron torneos.",
+            "blockedLabel": "BLOQUEADO",
+            "activeLabel": "ACTIVO",
+            "blocked": "Torneo bloqueado",
+            "unblocked": "Torneo desbloqueado",
+            "removeTitle": "Eliminar Torneo",
+            "removeConfirm": "Esto ocultará el torneo para todos los usuarios. ¿Continuar?",
+            "removeError": "Error al eliminar",
+            "removeSuccess": "Torneo eliminado",
+            "tournamentName": "Nombre del Torneo",
+            "club": "Club",
+            "date": "Fecha",
+            "status": "Estado",
+            "actions": "Acciones",
+            "tournament": "Torneo",
+            "active": "Activo",
+            "upcoming": "Próximo",
+            "completed": "Finalizado",
+            "confirmBlock": "¿Bloquear torneo?",
+            "confirmUnblock": "¿Desbloquear torneo?",
+            "confirmRemove": "¿Eliminar torneo?",
+            "actionError": "Error en la acción"
+        },
+        "billing": {
+            "title": "Historial de Facturación",
+            "subtitle": "Registro global de cobros y estados de pago de clubes.",
+            "searchPlaceholder": "Buscar por club o torneo...",
+            "allStatus": "Todos los Estados",
+            "paid": "Pagado",
+            "pending": "Pendiente",
+            "club": "Club",
+            "date": "Fecha",
+            "type": "Tipo",
+            "amount": "Monto",
+            "status": "Estado",
+            "actions": "Acciones",
+            "noInvoices": "No hay facturas registradas.",
+            "confirmStatusChange": "¿Cambiar el estado de pago de esta factura?",
+            "markPaid": "Marcar como Pagado",
+            "markPending": "Marcar como Pendiente",
+            "period": "Periodo",
+            "tournament": "Torneo"
+        },
+        "notifications": {
+            "title": "Centro de Difusión",
+            "subtitle": "Envía alertas de emergencia o anuncios dirigidos a los administradores.",
+            "targetType": "Tipo de Destinatario",
+            "type": {
+                "all": "Todos",
+                "club": "Club",
+                "individual": "Individual"
+            },
+            "platformWide": "Toda la Plataforma",
+            "specificClubs": "Clubes Específicos",
+            "selectClub": "Seleccionar Club",
+            "searchPlayer": "Buscar Jugador / Admin",
+            "searchPlaceholder": "Ingresa email (min. 3 letras)...",
+            "notificationTitle": "Título de Notificación",
+            "titlePlaceholder": "ej. Mantenimiento del Sistema Mañana",
+            "messageBody": "Cuerpo del Mensaje",
+            "bodyPlaceholder": "Detalla el mensaje aquí...",
+            "broadcastDesc": "Este mensaje será visible para TODOS los administradores y usuarios de la plataforma.",
+            "targetedDesc": "Este mensaje será visible únicamente para el administrador del club: %{club}.",
+            "individualDesc": "Este mensaje será visible únicamente para el usuario seleccionado.",
+            "confirmBroadcast": "¿Confirmas enviar esta notificación a TODA la plataforma?",
+            "confirmTargeted": "¿Confirmas enviar esta notificación al club %{club}?",
+            "confirmIndividual": "¿Confirmas enviar esta notificación a %{user}?",
+            "sendSuccess": "Notificación enviada exitosamente",
+            "sendError": "Error al enviar la notificación",
+            "sending": "Enviando...",
+            "sendBroadcast": "Enviar Difusión Global",
+            "sendToClub": "Enviar a Club",
+            "sendToPlayer": "Enviar a Usuario",
+            "requiredFields": "El título y el mensaje son obligatorios",
+            "targetedComm": "Comunicación Dirigida",
+            "targetedCommDesc": "Usa el modo individual para soporte técnico directo o alertas de cuenta a usuarios específicos."
+        },
+        "chat": {
+            "support": "Soporte Técnico",
+            "noActiveSessions": "No hay sesiones activas",
+            "startFirstChat": "Iniciar Primer Chat",
+            "adminSupport": "Soporte de Administración",
+            "activeSession": "Sesión de Chat Activa",
+            "noMessages": "No hay mensajes en esta conversación",
+            "typePlaceholder": "Escribe un mensaje...",
+            "selectSession": "Selecciona una Sesión",
+            "selectSessionDesc": "Elige un chat de la lista para ver los mensajes o inicia uno nuevo con un administrador de club.",
+            "startNewSupport": "Iniciar Nuevo Soporte",
+            "newChat": "Nuevo Chat de Soporte",
+            "selectAdmin": "Selecciona un Club para Contactar",
+            "searchPlaceholder": "Buscar clubes o ubicaciones...",
+            "noClubs": "No se encontraron clubes disponibles",
+            "startChatError": "Error al iniciar el chat"
+        },
+        "layout": {
+            "platformManager": "Gestor de Plataforma"
+        }
+    },
+    "public": {
+        "support": {
+            "title": "Ayuda y Soporte",
+            "description": "¿Cómo podemos ayudarte hoy? Encuentra respuestas a tus preguntas o comunícate con nuestro equipo.",
+            "faq": {
+                "title": "Preguntas Frecuentes",
+                "desc": "Consulta nuestro Centro de Ayuda en la aplicación para obtener respuestas inmediatas a las preguntas más comunes."
+            },
+            "contact": {
+                "title": "Contáctanos",
+                "desc": "Si necesitas asistencia adicional, comunícate con nuestro equipo de soporte.",
+                "button": "Enviar Correo"
+            }
+        },
+        "marketing": {
+            "hero": {
+                "title1": "Lleva tu nivel",
+                "title2": "al máximo.",
+                "subtitle": "Descubre la plataforma definitiva para Tenis, Padel y Pickleball. Encuentra partidos, reserva canchas y gestiona tu club en un solo lugar.",
+                "cta": "Comienza Ahora"
+            },
+            "features": {
+                "1": {
+                    "title": "Encuentra Partidos al Instante",
+                    "desc": "Conecta con jugadores de tu mismo nivel y organiza partidos con facilidad."
+                },
+                "2": {
+                    "title": "Compite y Sube de Nivel",
+                    "desc": "Únete a torneos locales, registra tus estadísticas y sube en el ranking de tu club."
+                },
+                "3": {
+                    "title": "Gestión de Clubes",
+                    "desc": "Herramientas poderosas para que los administradores gestionen canchas, facturación y socios."
+                }
+            },
+            "footer": "Todos los derechos reservados."
+        }
     }
 }

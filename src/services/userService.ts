@@ -1,4 +1,4 @@
-import { collection, collectionGroup, doc, documentId, getDoc, getDocs, increment, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, collectionGroup, doc, documentId, getDoc, getDocs, increment, query, updateDoc, where, writeBatch, limit } from 'firebase/firestore';
 import { db } from "../config/firebase";
 import { getClubById } from './clubService';
 import type { Match } from './types';
@@ -282,5 +282,23 @@ export const getUserProfile = async (uid: string): Promise<UserData | null> => {
     } catch (error) {
         console.error("Error getting user profile:", error);
         return null;
+    }
+};
+export const searchUsers = async (searchTerm: string, limitCount = 10): Promise<UserData[]> => {
+    try {
+        const usersRef = collection(db, "users");
+        // Simple search (case sensitive and needs exact prefix if using where, but we'll fetch and filter for better UX if needed)
+        // For a true search we should use a search index, but here we'll filter by email prefix
+        const q = query(
+            usersRef, 
+            where("email", ">=", searchTerm.toLowerCase()), 
+            where("email", "<=", searchTerm.toLowerCase() + "\uf8ff"),
+            limit(limitCount)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
+    } catch (error) {
+        console.error("Error searching users:", error);
+        return [];
     }
 };

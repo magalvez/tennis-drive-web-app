@@ -58,6 +58,9 @@ export interface TournamentData {
     paymentMethods?: PaymentMethods;
     gatewayConfig?: GatewayConfig;
     champions?: { [key: string]: string };
+    subchampions?: { [key: string]: string };
+    removedBy?: string;
+    isBlocked?: boolean;
 }
 
 export interface TournamentPlayer {
