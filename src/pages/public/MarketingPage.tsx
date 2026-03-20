@@ -52,6 +52,8 @@ export default function MarketingPage() {
         <p>© 2026 PlayOnCourt. {t('public.marketing.footer')}</p>
         <div className="mt-4 flex justify-center gap-6">
           <Link to="/support" className="hover:text-tennis-green transition-colors">{t('public.support.title')}</Link>
+          <Link to="/privacy" className="hover:text-tennis-green transition-colors">{t('public.privacy.title')}</Link>
+          <Link to="/terms" className="hover:text-tennis-green transition-colors">{t('public.terms.title')}</Link>
         </div>
       </footer>
     </div>

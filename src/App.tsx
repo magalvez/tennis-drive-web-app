@@ -26,6 +26,8 @@ import ManagerNotificationsPage from './pages/manager/ManagerNotificationsPage';
 import ManagerBillingPage from './pages/manager/ManagerBillingPage';
 import SupportPage from './pages/public/SupportPage';
 import MarketingPage from './pages/public/MarketingPage';
+import PrivacyPolicy from './pages/public/PrivacyPolicy';
+import TermsOfService from './pages/public/TermsOfService';
 
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, role, isLoading } = useAuth();
@@ -72,6 +74,8 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/support" element={<SupportPage />} />
             <Route path="/marketing" element={<MarketingPage />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route
               path="/admin/*"
               element={

@@ -1,5 +1,6 @@
 
 import { useLanguage } from '../../context/LanguageContext';
+import { Link } from 'react-router-dom';
 
 export default function SupportPage() {
   const { t } = useLanguage();
@@ -27,6 +28,11 @@ export default function SupportPage() {
               {t('public.support.contact.button')}
             </a>
           </div>
+        </div>
+
+        <div className="pt-8 flex justify-center gap-6 border-t border-white/5">
+          <Link to="/privacy" className="text-gray-500 hover:text-tennis-green transition-colors text-sm underline">{t('public.privacy.title')}</Link>
+          <Link to="/terms" className="text-gray-500 hover:text-tennis-green transition-colors text-sm underline">{t('public.terms.title')}</Link>
         </div>
       </div>
     </div>

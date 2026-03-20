@@ -939,6 +939,44 @@
                 "button": "Enviar Correo"
             }
         },
+        "privacy": {
+            "title": "Política de Privacidad",
+            "lastUpdated": "Última actualización: 19 de marzo, 2026",
+            "sections": {
+                "intro": "En PlayOnCourt, nos comprometemos a proteger su privacidad y garantizar una experiencia segura para todos los usuarios.",
+                "dataCollection": {
+                    "title": "1. Información que Recopilamos",
+                    "content": "Recopilamos la información que usted nos proporciona directamente, como su nombre, dirección de correo electrónico, foto de perfil y preferencias de juego al crear una cuenta."
+                },
+                "dataUsage": {
+                    "title": "2. Cómo Utilizamos su Información",
+                    "content": "Utilizamos su información para facilitar partidos, realizar un seguimiento de su desempeño y mejorar nuestros servicios. No vendemos sus datos personales a terceros."
+                },
+                "security": {
+                    "title": "3. Seguridad",
+                    "content": "Implementamos medidas de seguridad estándar de la industria para proteger sus datos contra el acceso o la divulgación no autorizados."
+                },
+                "contact": "Si tiene alguna pregunta sobre esta Política de Privacidad, contáctenos en support@playoncourt.com."
+            }
+        },
+        "terms": {
+            "title": "Términos de Servicio",
+            "lastUpdated": "Última actualización: 19 de marzo, 2026",
+            "sections": {
+                "acceptance": {
+                    "title": "1. Aceptación de los Términos",
+                    "content": "Al acceder o utilizar PlayOnCourt, usted acepta estar sujeto a estos Términos de Servicio."
+                },
+                "userConduct": {
+                    "title": "2. Conducta del Usuario",
+                    "content": "Los usuarios aceptan comportarse con respeto hacia otros jugadores y el personal del club. No se tolerará el acoso o comportamiento inapropiado."
+                },
+                "accountability": {
+                    "title": "3. Responsabilidad",
+                    "content": "Usted es responsable de mantener la confidencialidad de la información de su cuenta."
+                }
+            }
+        },
         "marketing": {
             "hero": {
                 "title1": "Lleva tu nivel",
