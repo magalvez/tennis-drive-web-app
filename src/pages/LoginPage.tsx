@@ -57,7 +57,7 @@ const LoginPage = () => {
 
             <div className="w-full max-w-md glass p-10 rounded-3xl z-10">
                 <div className="flex flex-col items-center mb-10">
-                    <img src={logo} alt="Play On Court" className="w-20 h-20 rounded-[24px] mb-6 shadow-xl shadow-tennis-green/20" />
+                    <img src={logo} alt="PlayOnCourt" className="w-20 h-20 rounded-[24px] mb-6 shadow-xl shadow-tennis-green/20" />
                     <h1 className="text-white text-3xl font-extrabold text-center uppercase tracking-tight">{t('auth.signIn')}</h1>
                     <p className="text-gray-400 mt-2 font-medium">{t('auth.welcomeBack')}</p>
                 </div>

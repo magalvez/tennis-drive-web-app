@@ -197,7 +197,7 @@ const NotificationsPage = () => {
                             <div className="flex justify-between items-center opacity-40">
                                 <div className="flex items-center gap-2">
                                     <div className="w-4 h-4 bg-tennis-green rounded flex items-center justify-center text-[10px] text-tennis-dark font-black">T</div>
-                                    <span className="text-[10px] font-bold">Play On Court</span>
+                                    <span className="text-[10px] font-bold">PlayOnCourt</span>
                                 </div>
                                 <span className="text-[10px]">{t('admin.activity.justNow')}</span>
                             </div>
