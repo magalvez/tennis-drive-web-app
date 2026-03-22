@@ -518,7 +518,9 @@
                 "labels": {
                     "cash": "Efectivo / Club",
                     "wireTransfer": "Transferencia Bancaria",
-                    "gateway": "Pasarela Online (Wompi)"
+                    "gateway": "Pasarela Online (Wompi)",
+                    "daviplata": "DaviPlata",
+                    "other": "Otro"
                 },
                 "gatewayOptions": "Opciones de Pasarela",
                 "warning": "Asegúrate de tener configurado el API Key de Wompi para pagos online.",
@@ -667,6 +669,13 @@
                 "removeConfirm": "¿Seguro que quieres quitar a este jugador/equipo del torneo?",
                 "assignSeed": "Asignar Siembra",
                 "recordPayment": "Registrar Pago",
+                "revertTitle": "Revertir Estado de Pago",
+                "revertConfirm": "¿Marcar a %{name} como NO PAGADO?",
+                "revertBtn": "Revertir",
+                "revertError": "Error al revertir el pago",
+                "revertedSuccess": "Pago revertido con éxito",
+                "note": "Nota",
+                "notePlaceholder": "ej. Efectivo, Invitación...",
                 "cleanupConfirm": "¿Seguro que quieres borrar TODOS los jugadores y equipos manuales de %{modality} en %{category}? Esta acción no se puede deshacer.",
                 "subtitle": "Gestiona todos los jugadores registrados y sus puntos del club.",
                 "roster": "Roster",

@@ -21,7 +21,7 @@ import { db } from '../../../config/firebase';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { notifyPlayerApproved } from '../../../services/notificationService';
-import { completeTransaction, createTransaction } from '../../../services/paymentService';
+import { completeTransaction, createTransaction, revertLatestTransactionForUser } from '../../../services/paymentService';
 import { approveRegistration, getPendingRegistrations, rejectRegistration, subscribeToTournamentPendingRegistrations } from '../../../services/registrationService';
 import {
     addPlayerToTournament,
@@ -81,7 +81,7 @@ const TournamentPlayersPage = () => {
 
     // Form States
     const [newPlayer, setNewPlayer] = useState({ name: '', player2Name: '', email: '', isWildcard: false });
-    const [paymentInfo, setPaymentInfo] = useState({ amount: '50', note: '' });
+    const [paymentInfo, setPaymentInfo] = useState({ amount: '50', note: '', type: 'cash' });
     const [selectedPlayer, setSelectedPlayer] = useState<TournamentPlayer | null>(null);
     const [selectedTeam, setSelectedTeam] = useState<DoublesTeam | null>(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -485,10 +485,12 @@ const TournamentPlayersPage = () => {
                 modality: isDoubles ? 'doubles' : 'singles',
                 doublesTeamId: isDoubles ? item.id : null,
                 tournamentPlayerId: isDoubles ? null : (item as TournamentPlayer).id,
-                clubId: tournament?.clubId
+                clubId: tournament?.clubId,
+                paymentMethod: paymentInfo.type
             } as any);
-            await completeTransaction(txId, 'manual_admin', 'manual', { note: paymentInfo.note });
+            await completeTransaction(txId, 'manual_admin', paymentInfo.type, { note: paymentInfo.note });
             setShowPaymentModal(false);
+            setPaymentInfo({ amount: tournament?.entryFee?.toString() || '50', note: '', type: 'cash' });
             await loadData();
             showConfirmation(t('common.success'), t('admin.tournaments.players.successRecord'), async () => { }, 'success');
         } catch (error) {
@@ -497,6 +499,38 @@ const TournamentPlayersPage = () => {
         } finally {
             setProcessing(false);
         }
+    };
+
+    const handleRevertPayment = async (item: TournamentPlayer | DoublesTeam) => {
+        if (!id || processing) return;
+
+        const name = 'player1Uid' in item ? (item as DoublesTeam).teamName || `${(item as DoublesTeam).player1Name} / ${(item as DoublesTeam).player2Name}` : (item as TournamentPlayer).name;
+
+        showConfirmation(
+            t('admin.tournaments.players.revertTitle'),
+            t('admin.tournaments.players.revertConfirm', { name }),
+            async () => {
+                setProcessing(true);
+                try {
+                    const uid = 'player1Uid' in item ? (item as DoublesTeam).player1Uid : (item as TournamentPlayer).uid;
+                    const playerId = 'player1Uid' in item ? item.id : (item as TournamentPlayer).id;
+
+                    const success = await revertLatestTransactionForUser(id, uid, playerId);
+                    if (success) {
+                        await loadData();
+                        showConfirmation(t('common.success'), t('admin.tournaments.players.revertedSuccess'), async () => { }, 'success');
+                    } else {
+                        showError(t('admin.tournaments.players.revertError'));
+                    }
+                } catch (error) {
+                    console.error(error);
+                    showError(t('admin.tournaments.players.revertError'));
+                } finally {
+                    setProcessing(false);
+                }
+            },
+            'warning'
+        );
     };
 
     const handleAcceptRequest = async (request: DoublesRequest) => {
@@ -739,7 +773,7 @@ const TournamentPlayersPage = () => {
                                     {item.paymentStatus !== 'paid' ? (
                                         <button title={t('common.payment')} onClick={() => { if ('player1Uid' in item) setSelectedTeam(item as DoublesTeam); else setSelectedPlayer(item as TournamentPlayer); setShowPaymentModal(true); }} className="p-3 rounded-xl bg-white/5 text-gray-500 hover:text-tennis-green"><DollarSign size={20} /></button>
                                     ) : (
-                                        <div className="p-3 text-blue-400" title={t('common.paid')}><Check size={20} /></div>
+                                        <button title={t('admin.tournaments.players.revertTitle')} onClick={() => handleRevertPayment(item)} className="p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"><Check size={20} /></button>
                                     )}
                                     <button title={t('common.delete')} onClick={() => handleRemove(item)} className="p-3 rounded-xl bg-white/5 text-gray-500 hover:text-red-500"><Trash2 size={20} /></button>
                                 </div>
@@ -815,15 +849,35 @@ const TournamentPlayersPage = () => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-3 text-center">
-                                    <Banknote size={24} className="text-tennis-green" />
-                                    <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">{t('admin.tournaments.paymentMethods.labels.cash')}</span>
+                            <div className="space-y-3">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.players.method')}</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {[
+                                        { id: 'cash', label: t('admin.tournaments.paymentMethods.labels.cash'), icon: <Banknote size={24} />, color: 'text-tennis-green' },
+                                        { id: 'daviplata', label: t('admin.tournaments.paymentMethods.labels.daviplata'), icon: <DollarSign size={24} />, color: 'text-pink-500' },
+                                        { id: 'wireTransfer', label: t('admin.tournaments.paymentMethods.labels.wireTransfer'), icon: <Building2 size={24} />, color: 'text-blue-400' },
+                                        { id: 'other', label: t('admin.tournaments.paymentMethods.labels.other'), icon: <Plus size={24} />, color: 'text-gray-400' }
+                                    ].map(method => (
+                                        <div
+                                            key={method.id}
+                                            onClick={() => setPaymentInfo({ ...paymentInfo, type: method.id })}
+                                            className={`p-4 rounded-2xl border cursor-pointer flex flex-col items-center gap-3 text-center transition-all ${paymentInfo.type === method.id ? 'bg-tennis-green/10 border-tennis-green' : 'bg-white/5 border-white/5 hover:border-white/10'}`}
+                                        >
+                                            <div className={method.color}>{method.icon}</div>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest">{method.label}</span>
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-3 text-center">
-                                    <Building2 size={24} className="text-blue-400" />
-                                    <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">{t('admin.tournaments.paymentMethods.labels.wireTransfer')}</span>
-                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest ml-1">{t('admin.tournaments.players.note')}</label>
+                                <textarea
+                                    className="w-full bg-white/5 border border-white/5 rounded-2xl px-6 py-4 text-white text-sm font-bold focus:outline-none focus:border-tennis-green/20 transition-all resize-none h-24"
+                                    placeholder={t('admin.tournaments.players.notePlaceholder')}
+                                    value={paymentInfo.note}
+                                    onChange={e => setPaymentInfo({ ...paymentInfo, note: e.target.value })}
+                                />
                             </div>
                         </div>
 
