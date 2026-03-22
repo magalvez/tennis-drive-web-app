@@ -144,6 +144,7 @@ export const recalculateClubPoints = async (clubId: string) => {
             matchSnap.forEach(docSnap => {
                 const match = docSnap.data() as Match;
                 if (!match.winnerId) return;
+                if (match.isBye) return;
 
                 const p1 = match.player1Uid;
                 const p2 = match.player2Uid;
@@ -186,6 +187,7 @@ export const recalculateGlobalRankings = async () => {
 
         snapshot.forEach(docSnap => {
             const match = docSnap.data() as Match;
+            if (match.isBye) return;
             if (match.winnerId) {
                 const winnerId = match.winnerId;
                 const loserId = match.player1Uid === winnerId ? match.player2Uid : match.player1Uid;

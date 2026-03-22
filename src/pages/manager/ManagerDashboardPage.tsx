@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Bell, Building2, CreditCard, DollarSign, TrendingUp, Trophy, Users } from 'lucide-react';
+import { Bell, Building2, CreditCard, DollarSign, TrendingUp, Trophy, Users, RefreshCw, Check } from 'lucide-react';
 import { getAllClubs, getRevenueAnalytics } from '../../services/managerService';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
+import { recalculateGlobalRankings } from '../../services/userService';
+import ConfirmModal from '../../components/admin/ConfirmModal';
 
 const ManagerDashboardPage = () => {
     const navigate = useNavigate();
@@ -14,6 +16,9 @@ const ManagerDashboardPage = () => {
         billingCount: 0
     });
     const [loading, setLoading] = useState(true);
+    const [recalculating, setRecalculating] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -38,6 +43,20 @@ const ManagerDashboardPage = () => {
         fetchData();
     }, []);
 
+    const handleRecalculateRanking = async () => {
+        setShowConfirmModal(false);
+        setRecalculating(true);
+        try {
+            await recalculateGlobalRankings();
+            setSuccessMessage(t('admin.global.recalculationSuccess') || "Rankings updated!");
+            setTimeout(() => setSuccessMessage(null), 3000);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setRecalculating(false);
+        }
+    };
+
     const cards = [
         { title: t('manager.dashboard.activeClubs'), value: stats.activeClubs, icon: <Building2 className="text-tennis-green" />, sub: t('manager.dashboard.registeredClubs'), path: '/manager/clubs' },
         { title: t('manager.dashboard.totalRevenue'), value: `$${stats.totalRevenue.toLocaleString()}`, icon: <DollarSign className="text-tennis-green" />, sub: t('manager.dashboard.copTotal'), path: '/manager/billing' },
@@ -53,9 +72,17 @@ const ManagerDashboardPage = () => {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-black text-white tracking-tight">{t('manager.dashboard.title')}</h1>
-                <p className="text-gray-400 mt-1">{t('manager.dashboard.subtitle')}</p>
+            <div className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-black text-white tracking-tight">{t('manager.dashboard.title')}</h1>
+                    <p className="text-gray-400 mt-1">{t('manager.dashboard.subtitle')}</p>
+                </div>
+                {successMessage && (
+                    <div className="bg-tennis-green/10 border border-tennis-green/20 text-tennis-green px-6 py-3 rounded-2xl flex items-center gap-2 animate-bounce">
+                        <Check size={18} />
+                        <span className="font-bold text-sm">{successMessage}</span>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -123,6 +150,39 @@ const ManagerDashboardPage = () => {
                     </p>
                 </div>
             </div>
+
+            {/* Global Management Section */}
+            <div className="bg-[#1f1f1f] border border-white/5 p-8 rounded-[2rem] mt-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-black text-white">{t('admin.global.title')}</h2>
+                    <span className="text-[10px] font-black text-purple-400 bg-purple-400/10 px-3 py-1 rounded-full uppercase tracking-widest">{t('manager.dashboard.tools')}</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <button
+                        onClick={() => setShowConfirmModal(true)}
+                        disabled={recalculating}
+                        className="flex items-center gap-6 p-6 bg-white/5 rounded-3xl border border-white/5 hover:border-purple-400/30 transition-all group active:scale-[0.98]"
+                    >
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-purple-400 bg-purple-400/10 group-hover:rotate-180 transition-transform duration-700 ${recalculating ? 'animate-spin' : ''}`}>
+                            <RefreshCw size={24} />
+                        </div>
+                        <div className="text-left">
+                            <p className="text-white font-bold">{t('admin.global.recalculateRanking')}</p>
+                            <p className="text-gray-500 text-xs mt-1 leading-relaxed">{t('admin.global.recalculateRankingDesc')}</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={handleRecalculateRanking}
+                title={t('admin.global.recalculateRanking')}
+                message={t('config.system.recalculateConfirm') || "This will process all match history and update every player's XP. Continue?"}
+                processing={recalculating}
+            />
         </div>
     );
 };

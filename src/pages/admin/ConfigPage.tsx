@@ -5,15 +5,12 @@ import {
     LogOut,
     RefreshCw,
     Save,
-    Shield,
     Trophy
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getClubById, updateClub } from '../../services/clubService';
-import { recalculateGlobalRankings } from '../../services/userService';
-import ConfirmModal from '../../components/admin/ConfirmModal';
 
 const ConfigPage = () => {
     const { managedClubId, logout } = useAuth();
@@ -21,9 +18,7 @@ const ConfigPage = () => {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [recalculating, setRecalculating] = useState(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     // Form State
     const [clubName, setClubName] = useState('');
@@ -74,19 +69,6 @@ const ConfigPage = () => {
             alert(t('config.error') || "Failed to update club.");
         } finally {
             setSaving(false);
-        }
-    };
-
-    const handleRecalculateRanking = async () => {
-        setShowConfirmModal(false);
-        setRecalculating(true);
-        try {
-            await recalculateGlobalRankings();
-            showSuccess(t('config.system.recalculateSuccess') || "Global rankings recalculated successfully!");
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setRecalculating(false);
         }
     };
 
@@ -211,30 +193,6 @@ const ConfigPage = () => {
 
                 {/* Sidebar Settings */}
                 <div className="space-y-8">
-                    {/* System Utilities */}
-                    <div className="glass p-8 rounded-[40px] border-white/5 space-y-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400">
-                                <Shield size={20} />
-                            </div>
-                            <h4 className="text-white font-bold uppercase tracking-widest text-xs">{t('config.system.title')}</h4>
-                        </div>
-
-                        <button
-                            onClick={() => setShowConfirmModal(true)}
-                            disabled={recalculating}
-                            className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center gap-4 transition-all group"
-                        >
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-purple-400 bg-purple-400/10 group-hover:rotate-180 transition-transform duration-700 ${recalculating ? 'animate-spin' : ''}`}>
-                                <RefreshCw size={20} />
-                            </div>
-                            <div className="text-left">
-                                <p className="text-white text-sm font-bold">{t('config.system.recalculate')}</p>
-                                <p className="text-gray-500 text-[10px] font-medium">{t('config.system.recalculateDesc')}</p>
-                            </div>
-                        </button>
-                    </div>
-
                     <div className="glass p-8 rounded-[40px] border-white/5 space-y-8">
                         <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-white">
@@ -283,14 +241,6 @@ const ConfigPage = () => {
                 </div>
             </div>
 
-            <ConfirmModal
-                isOpen={showConfirmModal}
-                onClose={() => setShowConfirmModal(false)}
-                onConfirm={handleRecalculateRanking}
-                title={t('config.system.recalculate')}
-                message={t('config.system.recalculateConfirm') || "This will process all match history and update every player's XP. Continue?"}
-                processing={recalculating}
-            />
         </div>
     );
 };
