@@ -48,7 +48,8 @@
         "payments": "Pagos",
         "notifications": "Notificaciones",
         "admins": "Admins",
-        "config": "Configuración"
+        "config": "Configuración",
+        "support": "Soporte"
     },
     "dashboard": {
         "performanceOverview": "Vista General de Rendimiento",
@@ -255,6 +256,13 @@
         "languageChanged": "¡Idioma actualizado con éxito!"
     },
     "admin": {
+        "support": {
+            "title": "Soporte Técnico",
+            "subtitle": "Atención directa con el Gestor de Plataforma",
+            "activeSession": "Sesión Activa",
+            "noMessages": "No hay mensajes aún. Inicia la conversación con el gestor de la plataforma.",
+            "typePlaceholder": "Escribe un mensaje..."
+        },
         "title": "Centro de Control",
         "subtitle": "Administrador",
         "stats": {
@@ -782,6 +790,7 @@
         "settings": {
             "title": "Configuración Global",
             "subtitle": "Configuraciones y controles de toda la plataforma.",
+            "epaycoVerify": "Verificación ePayco",
             "epaycoConfig": "Configuración de EPayco",
             "publicKey": "Clave Pública",
             "publicKeyPlaceholder": "Clave API Pública...",
@@ -925,6 +934,7 @@
             "targetedCommDesc": "Usa el modo individual para soporte técnico directo o alertas de cuenta a usuarios específicos."
         },
         "chat": {
+            "title": "Soporte Técnico",
             "support": "Soporte Técnico",
             "noActiveSessions": "No hay sesiones activas",
             "startFirstChat": "Iniciar Primer Chat",

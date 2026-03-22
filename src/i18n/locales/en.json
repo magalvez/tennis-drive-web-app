@@ -39,7 +39,8 @@
         "payments": "Payments",
         "notifications": "Notifications",
         "admins": "Admins",
-        "config": "Configuration"
+        "config": "Configuration",
+        "support": "Support"
     },
     "dashboard": {
         "performanceOverview": "Performance Overview",
@@ -237,6 +238,13 @@
         "languageChanged": "Language updated successfully!"
     },
     "admin": {
+        "support": {
+            "title": "Technical Support",
+            "subtitle": "Direct attention from Platform Manager",
+            "activeSession": "Active Session",
+            "noMessages": "No messages yet. Start the conversation with the platform manager.",
+            "typePlaceholder": "Type a message..."
+        },
         "title": "Control Center",
         "subtitle": "Administrator",
         "stats": {
@@ -929,6 +937,7 @@
             "targetedCommDesc": "Use individual mode for direct technical support or account alerts to specific users."
         },
         "chat": {
+            "title": "Technical Support",
             "support": "Technical Support",
             "noActiveSessions": "No active sessions",
             "startFirstChat": "Start First Chat",

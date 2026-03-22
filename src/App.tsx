@@ -8,6 +8,7 @@ import ManageAdminsPage from './pages/admin/ManageAdminsPage';
 import NotificationsPage from './pages/admin/NotificationsPage';
 import PaymentsPage from './pages/admin/PaymentsPage';
 import PlayersPage from './pages/admin/PlayersPage';
+import AdminSupportPage from './pages/admin/AdminSupportPage';
 import CreateTournamentPage from './pages/admin/tournaments/CreateTournamentPage';
 import EditTournamentPage from './pages/admin/tournaments/EditTournamentPage';
 import TournamentDetailPage from './pages/admin/tournaments/TournamentDetailPage';
@@ -98,6 +99,7 @@ function App() {
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="users/admins" element={<ManageAdminsPage />} />
               <Route path="config" element={<ConfigPage />} />
+              <Route path="support" element={<AdminSupportPage />} />
             </Route>
 
             <Route

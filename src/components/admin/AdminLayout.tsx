@@ -6,6 +6,7 @@ import {
     LayoutDashboard,
     LogOut,
     Menu,
+    MessageSquare,
     Settings,
     Shield,
     Trophy,
@@ -39,6 +40,7 @@ const AdminLayout = () => {
         { icon: <Bell size={20} />, label: t('adminTabs.notifications'), path: '/admin/notifications' },
         { icon: <Shield size={20} />, label: t('adminTabs.admins'), path: '/admin/users/admins' },
         { icon: <Settings size={20} />, label: t('adminTabs.config'), path: '/admin/config' },
+        { icon: <MessageSquare size={20} />, label: t('adminTabs.support'), path: '/admin/support' },
     ];
 
     return (
