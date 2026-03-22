@@ -1,4 +1,4 @@
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, getDocs, query, Timestamp, where } from 'firebase/firestore';
 import {
     ArrowLeft,
     Check,
@@ -246,17 +246,40 @@ const TournamentPlayersPage = () => {
                     addedAt: Timestamp.now()
                 } as any);
             } else {
-                const userRef = await addDoc(collection(db, 'users'), {
-                    displayName: newPlayer.name.trim(),
-                    createdAt: Timestamp.now(),
-                    isManual: true,
-                    role: 'player',
-                    sportsProfiles
-                });
+                let userUid: string | undefined = undefined;
+                const email = newPlayer.email?.trim();
+
+                if (email) {
+                    const q = query(collection(db, 'users'), where('email', '==', email));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        userUid = snap.docs[0].id;
+                    } else {
+                        const userRef = await addDoc(collection(db, 'users'), {
+                            displayName: newPlayer.name.trim(),
+                            email: email,
+                            createdAt: Timestamp.now(),
+                            isManual: true,
+                            role: 'player',
+                            sportsProfiles
+                        });
+                        userUid = userRef.id;
+                    }
+                } else {
+                    const userRef = await addDoc(collection(db, 'users'), {
+                        displayName: newPlayer.name.trim(),
+                        createdAt: Timestamp.now(),
+                        isManual: true,
+                        role: 'player',
+                        sportsProfiles
+                    });
+                    userUid = userRef.id;
+                }
 
                 await addPlayerToTournament(id, {
                     name: newPlayer.name.trim(),
-                    uid: userRef.id,
+                    uid: userUid,
+                    email: email || undefined,
                     isWildcard: newPlayer.isWildcard,
                     category: cat,
                     registrationStatus: 'approved'
@@ -734,6 +757,15 @@ const TournamentPlayersPage = () => {
                         <h2 className="text-white text-3xl font-black uppercase mb-10">{selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}</h2>
                         <form onSubmit={handleAddPlayer} className="space-y-8">
                             <input className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold border border-white/10" value={newPlayer.name} onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })} placeholder={t('common.name')} required />
+                            {selectedModality !== 'doubles' && (
+                                <input
+                                    className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold border border-white/10"
+                                    value={newPlayer.email}
+                                    onChange={e => setNewPlayer({ ...newPlayer, email: e.target.value })}
+                                    placeholder={t('auth.email') + " " + t('common.optional')}
+                                    type="email"
+                                />
+                            )}
                             {selectedModality === 'doubles' && <input className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold border border-white/10" value={newPlayer.player2Name} onChange={e => setNewPlayer({ ...newPlayer, player2Name: e.target.value })} placeholder={t('admin.tournaments.partnerName')} required />}
                             <div onClick={() => setNewPlayer({ ...newPlayer, isWildcard: !newPlayer.isWildcard })} className={`p-6 rounded-2xl cursor-pointer flex justify-between items-center ${newPlayer.isWildcard ? 'bg-yellow-500/10 border-yellow-500' : 'bg-white/5'}`}>
                                 <div className="flex items-center gap-4"><Crown className={newPlayer.isWildcard ? 'text-yellow-500' : 'text-gray-500'} /><span className="text-white font-bold">{t('common.wildcard')}</span></div>
