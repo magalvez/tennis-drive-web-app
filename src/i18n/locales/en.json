@@ -939,7 +939,12 @@
         "chat": {
             "title": "Technical Support",
             "support": "Technical Support",
+            "tabs": {
+                "active": "Active",
+                "closed": "Closed"
+            },
             "noActiveSessions": "No active sessions",
+            "noClosedSessions": "No closed sessions",
             "startFirstChat": "Start First Chat",
             "adminSupport": "Admin Support",
             "activeSession": "Active Chat Session",
@@ -952,7 +957,13 @@
             "selectAdmin": "Select a Club to Contact",
             "searchPlaceholder": "Search clubs or locations...",
             "noClubs": "No available clubs found",
-            "startChatError": "Failed to start chat"
+            "startChatError": "Failed to start chat",
+            "openSession": "Open Session",
+            "statusClosed": "Closed",
+            "sessionClosed": "This session has been closed.",
+            "closedPlaceholder": "Chat closed",
+            "confirmClose": "Are you sure you want to close this session?",
+            "closeSession": "Close Session"
         },
         "layout": {
             "platformManager": "Platform Manager"

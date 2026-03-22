@@ -936,7 +936,12 @@
         "chat": {
             "title": "Soporte Técnico",
             "support": "Soporte Técnico",
+            "tabs": {
+                "active": "Activos",
+                "closed": "Cerrados"
+            },
             "noActiveSessions": "No hay sesiones activas",
+            "noClosedSessions": "No hay sesiones cerradas",
             "startFirstChat": "Iniciar Primer Chat",
             "adminSupport": "Soporte de Administración",
             "activeSession": "Sesión de Chat Activa",
@@ -949,7 +954,13 @@
             "selectAdmin": "Selecciona un Club para Contactar",
             "searchPlaceholder": "Buscar clubes o ubicaciones...",
             "noClubs": "No se encontraron clubes disponibles",
-            "startChatError": "Error al iniciar el chat"
+            "startChatError": "Error al iniciar el chat",
+            "openSession": "Sesión Abierta",
+            "statusClosed": "Cerrado",
+            "sessionClosed": "Esta sesión ha sido cerrada.",
+            "closedPlaceholder": "Chat cerrado",
+            "confirmClose": "¿Estás seguro de que quieres cerrar esta sesión?",
+            "closeSession": "Cerrar Sesión"
         },
         "layout": {
             "platformManager": "Gestor de Plataforma"

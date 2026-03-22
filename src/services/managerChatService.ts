@@ -19,6 +19,9 @@ export interface ManagerChat {
     lastMessageAt?: Timestamp;
     unreadCountAdmin: number;
     unreadCountManager: number;
+    status: 'active' | 'closed';
+    clubName?: string;
+    managerName?: string;
 }
 
 /**
@@ -29,7 +32,8 @@ export const getOrCreateManagerChat = async (managerId: string, adminId: string,
         const q = query(
             collection(db, "manager_chats"),
             where("managerId", "==", managerId),
-            where("adminId", "==", adminId)
+            where("adminId", "==", adminId),
+            where("status", "==", "active")
         );
         
         const snapshot = await getDocs(q);
@@ -37,7 +41,7 @@ export const getOrCreateManagerChat = async (managerId: string, adminId: string,
             return snapshot.docs[0].id;
         }
 
-        const newChat = {
+        const newChat: any = {
             managerId,
             adminId,
             clubId,
@@ -45,7 +49,8 @@ export const getOrCreateManagerChat = async (managerId: string, adminId: string,
             managerName: managerName || 'Platform Manager',
             unreadCountAdmin: 0,
             unreadCountManager: 0,
-            lastMessageAt: Timestamp.now()
+            lastMessageAt: Timestamp.now(),
+            status: 'active'
         };
 
         const docRef = await addDoc(collection(db, "manager_chats"), newChat);
@@ -80,6 +85,15 @@ export const getChatData = async (chatId: string): Promise<ManagerChat> => {
  */
 export const sendManagerMessage = async (chatId: string, senderId: string, role: 'manager' | 'admin', content: string) => {
     try {
+        const chatRef = doc(db, "manager_chats", chatId);
+        const chatSnap = await getDoc(chatRef);
+        if (!chatSnap.exists()) throw new Error("Chat not found");
+        const chatData = chatSnap.data() as ManagerChat;
+
+        if (chatData.status === 'closed') {
+            throw new Error("Cannot send messages to a closed chat");
+        }
+
         const message = {
             chatId,
             senderId,
@@ -91,7 +105,6 @@ export const sendManagerMessage = async (chatId: string, senderId: string, role:
         await addDoc(collection(db, "manager_chats", chatId, "messages"), message);
 
         // Update chat head
-        const chatRef = doc(db, "manager_chats", chatId);
         const updates: any = {
             lastMessage: content,
             lastMessageAt: Timestamp.now()
@@ -126,6 +139,35 @@ export const subscribeToManagerMessages = (chatId: string, callback: (messages: 
             ...doc.data()
         } as ManagerChatMessage));
         callback(messages.reverse());
+    });
+};
+
+/**
+ * Close a support chat
+ */
+export const closeManagerChat = async (chatId: string) => {
+    try {
+        const chatRef = doc(db, "manager_chats", chatId);
+        await updateDoc(chatRef, { 
+            status: 'closed',
+            lastMessage: 'Chat closed',
+            lastMessageAt: Timestamp.now()
+        });
+    } catch (error) {
+        console.error("Error closing manager chat:", error);
+        throw error;
+    }
+};
+
+/**
+ * Subscribe to chat head data
+ */
+export const subscribeToChatHead = (chatId: string, callback: (chat: ManagerChat) => void) => {
+    const chatRef = doc(db, "manager_chats", chatId);
+    return onSnapshot(chatRef, (snapshot) => {
+        if (snapshot.exists()) {
+            callback({ id: snapshot.id, ...snapshot.data() } as ManagerChat);
+        }
     });
 };
 
