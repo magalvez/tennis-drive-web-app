@@ -683,6 +683,12 @@
             },
             "players": {
                 "title": "Jugadores",
+                "selectRegistered": "Seleccionar Jugador Registrado",
+                "searchRegisteredPh": "Buscar por nombre o email...",
+                "typeToSearch": "Escribe al menos 2 caracteres para buscar",
+                "noPlayersFound": "No se encontraron jugadores en la base de datos",
+                "alreadyIn": "Ya está en la Categoría",
+                "alreadyInTournament": "Este jugador ya está registrado en esta categoría",
                 "requests": "Solicitudes",
                 "remove": "Quitar Jugador",
                 "removeConfirm": "¿Seguro que quieres quitar a este jugador/equipo del torneo?",

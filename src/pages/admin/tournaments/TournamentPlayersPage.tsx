@@ -53,6 +53,9 @@ import type { DoublesRequest } from '../../../services/doublesRequestService';
 import type { TournamentCategory, TournamentData, TournamentPlayer } from '../../../services/types';
 import type { DoublesTeam } from '../../../services/doublesTeamService';
 import PlayerStatsModal from '../../../components/admin/PlayerStatsModal';
+import { searchUsers } from '../../../services/userService';
+import type { UserData } from '../../../services/userService';
+import { Search, User } from 'lucide-react';
 
 const TournamentPlayersPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -78,9 +81,13 @@ const TournamentPlayersPage = () => {
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [showSeedModal, setShowSeedModal] = useState(false);
     const [showStatsModal, setShowStatsModal] = useState(false);
+    const [showSelectRegisteredModal, setShowSelectRegisteredModal] = useState(false);
 
     // Form States
     const [newPlayer, setNewPlayer] = useState({ name: '', player2Name: '', email: '', isWildcard: false });
+    const [registeredPlayers, setRegisteredPlayers] = useState<UserData[]>([]);
+    const [playersSearch, setPlayersSearch] = useState('');
+    const [searchingPlayers, setSearchingPlayers] = useState(false);
     const [paymentInfo, setPaymentInfo] = useState({ amount: '50', note: '', type: 'cash' });
     const [selectedPlayer, setSelectedPlayer] = useState<TournamentPlayer | null>(null);
     const [selectedTeam, setSelectedTeam] = useState<DoublesTeam | null>(null);
@@ -185,6 +192,58 @@ const TournamentPlayersPage = () => {
         });
         return () => unsubscribe();
     }, [id]);
+
+    const handleSearchPlayers = async (val: string) => {
+        setPlayersSearch(val);
+        if (val.length < 2) {
+            setRegisteredPlayers([]);
+            return;
+        }
+        setSearchingPlayers(true);
+        try {
+            const results = await searchUsers(val);
+            // Filter out players already registered in the current tournament category
+            const filteredResults = results.filter(p => !players.some(pl => pl.uid === p.uid && pl.category === selectedCategory));
+            setRegisteredPlayers(filteredResults);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setSearchingPlayers(false);
+        }
+    };
+
+    const handleSelectRegisteredPlayer = async (p: UserData) => {
+        if (!id || processing) return;
+
+        // Check if player is already in the tournament (current category)
+        const isAlreadyIn = players.some(pl => pl.uid === p.uid && pl.category === selectedCategory);
+        if (isAlreadyIn) {
+            showError(t('admin.tournaments.players.alreadyInTournament'));
+            return;
+        }
+
+        setProcessing(true);
+        try {
+            await addPlayerToTournament(id, {
+                name: p.displayName || '',
+                uid: p.uid,
+                email: p.email,
+                category: selectedCategory as TournamentCategory,
+                registrationStatus: 'approved'
+            });
+            await loadData();
+            setShowSelectRegisteredModal(false);
+            setShowAddModal(false);
+            setPlayersSearch('');
+            setRegisteredPlayers([]);
+            showConfirmation(t('common.success'), t('admin.tournaments.players.successAdd'), async () => { }, 'success');
+        } catch (error) {
+            console.error(error);
+            showError("Failed to add player");
+        } finally {
+            setProcessing(false);
+        }
+    };
 
     const handleAddPlayer = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -670,6 +729,12 @@ const TournamentPlayersPage = () => {
                 <div className="flex items-center gap-3">
                     <button onClick={handleCleanup} className="p-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl border border-red-500/10 transition-all"><Trash2 size={24} /></button>
                     <button onClick={() => setShowRandomModal(true)} className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"><Users size={24} /></button>
+                    {selectedModality === 'singles' && (
+                        <button onClick={() => setShowSelectRegisteredModal(true)} className="bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 border border-white/10">
+                            <Search size={20} />
+                            {t('admin.tournaments.players.selectRegistered')}
+                        </button>
+                    )}
                     <button onClick={() => setShowAddModal(true)} className="bg-tennis-green hover:bg-tennis-green/90 text-tennis-dark px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2">
                         <Plus size={20} />
                         {selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}
@@ -790,6 +855,16 @@ const TournamentPlayersPage = () => {
                     <div className="w-full max-w-xl bg-gray-950 p-12 overflow-y-auto relative border-l border-white/10">
                         <h2 className="text-white text-3xl font-black uppercase mb-10">{selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}</h2>
                         <form onSubmit={handleAddPlayer} className="space-y-8">
+                            {selectedModality !== 'doubles' && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSelectRegisteredModal(true)}
+                                    className="w-full bg-blue-500/10 text-blue-400 py-4 rounded-2xl font-bold uppercase tracking-wider border border-blue-500/20 hover:bg-blue-500/20 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Search size={18} />
+                                    {t('admin.tournaments.players.selectRegistered')}
+                                </button>
+                            )}
                             <input className="w-full bg-white/5 p-5 rounded-2xl text-white font-bold border border-white/10" value={newPlayer.name} onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })} placeholder={t('common.name')} required />
                             {selectedModality !== 'doubles' && (
                                 <input
@@ -809,6 +884,65 @@ const TournamentPlayersPage = () => {
                                 {selectedModality === 'doubles' ? t('admin.tournaments.addTeam') : t('admin.tournaments.addPlayer')}
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {showSelectRegisteredModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowSelectRegisteredModal(false)} />
+                    <div className="bg-gray-950 p-10 rounded-[40px] border border-white/10 w-full max-w-xl relative shadow-2xl flex flex-col max-h-[80vh]">
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-white text-2xl font-black uppercase tracking-tight">{t('admin.tournaments.players.selectRegistered')}</h2>
+                            <button onClick={() => setShowSelectRegisteredModal(false)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-gray-500"><X size={20} /></button>
+                        </div>
+
+                        <div className="relative mb-6">
+                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                            <input
+                                className="w-full bg-white/5 p-5 pl-14 rounded-2xl text-white font-bold border border-white/10 outline-none focus:border-tennis-green/30"
+                                value={playersSearch}
+                                onChange={e => handleSearchPlayers(e.target.value)}
+                                placeholder={t('admin.tournaments.players.searchRegisteredPh')}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/10">
+                            {searchingPlayers ? (
+                                <div className="flex justify-center py-10"><RefreshCw className="animate-spin text-tennis-green" size={32} /></div>
+                            ) : registeredPlayers.length === 0 ? (
+                                <div className="text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10">
+                                    <p className="text-gray-500 font-bold">{playersSearch.length < 2 ? t('admin.tournaments.players.typeToSearch') : t('admin.tournaments.players.noPlayersFound')}</p>
+                                </div>
+                            ) : (
+                                registeredPlayers.map(p => {
+                                    const isAlreadyIn = players.some(pl => pl.uid === p.uid && pl.category === selectedCategory);
+                                    return (
+                                        <div
+                                            key={p.uid}
+                                            onClick={() => !isAlreadyIn && handleSelectRegisteredPlayer(p)}
+                                            className={`p-5 rounded-2xl border transition-all flex items-center justify-between group ${isAlreadyIn ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed' : 'bg-white/5 border-white/5 hover:border-tennis-green/30 cursor-pointer'}`}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-tennis-green group-hover:text-tennis-dark">
+                                                    <User size={20} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-white font-bold">{p.displayName}</p>
+                                                    <p className="text-gray-500 text-xs">{p.email}</p>
+                                                </div>
+                                            </div>
+                                            {isAlreadyIn ? (
+                                                <span className="text-[10px] bg-white/10 text-gray-400 px-3 py-1 rounded-full font-black uppercase tracking-widest">{t('admin.tournaments.players.alreadyIn')}</span>
+                                            ) : (
+                                                <button className="p-2 rounded-xl bg-tennis-green/10 text-tennis-green opacity-0 group-hover:opacity-100 transition-all"><Plus size={20} /></button>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -948,6 +1082,73 @@ const TournamentPlayersPage = () => {
                             >
                                 {confirmModal.type === 'success' ? t('common.close') : t('common.confirm')}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showSelectRegisteredModal && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md no-print overflow-y-auto">
+                    <div className="glass max-w-2xl w-full p-8 md:p-12 rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('admin.tournaments.players.selectRegistered')}</h2>
+                                <p className="text-gray-400 font-bold mt-1 uppercase tracking-widest text-sm">{selectedCategory?.toUpperCase()}</p>
+                            </div>
+                            <button onClick={() => setShowSelectRegisteredModal(false)} className="p-4 bg-white/5 hover:bg-white/10 text-gray-400 rounded-2xl border border-white/10 transition-all"><X size={24} /></button>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="relative">
+                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 w-6 h-6" />
+                                <input
+                                    type="text"
+                                    value={playersSearch}
+                                    onChange={(e) => handleSearchPlayers(e.target.value)}
+                                    placeholder={t('admin.tournaments.players.searchRegisteredPh')}
+                                    className="w-full bg-white/5 border border-white/10 text-white pl-16 pr-6 py-6 rounded-2xl font-bold placeholder:text-gray-500 focus:border-tennis-green/50 focus:ring-4 focus:ring-tennis-green/10 transition-all text-xl outline-none"
+                                />
+                            </div>
+
+                            <div className="max-h-[50vh] overflow-y-auto pr-2 space-y-4 custom-scrollbar">
+                                {searchingPlayers ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-tennis-green border-t-transparent"></div>
+                                    </div>
+                                ) : registeredPlayers.length > 0 ? (
+                                    registeredPlayers.map(p => (
+                                        <div key={p.uid} className="flex items-center justify-between p-6 bg-white/5 hover:bg-white/10 rounded-[30px] border border-white/5 transition-all group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-400 group-hover:bg-tennis-green/10 group-hover:text-tennis-green transition-all">
+                                                    {p.photoURL ? <img src={p.photoURL} className="w-full h-full rounded-2xl object-cover" /> : <User size={28} />}
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-white font-black text-xl uppercase tracking-tight">{p.displayName}</h4>
+                                                    <p className="text-gray-400 font-bold text-sm tracking-wide">{p.email || t('admin.tournaments.noEmail')}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleSelectRegisteredPlayer(p)}
+                                                disabled={processing}
+                                                className="px-8 py-3 bg-tennis-green text-tennis-dark font-black rounded-2xl uppercase tracking-widest text-sm hover:scale-105 active:scale-95 transition-all shadow-lg"
+                                            >
+                                                {processing ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-tennis-dark border-t-transparent" /> : t('common.confirm')}
+                                            </button>
+                                        </div>
+                                    ))
+                                ) : playersSearch.length >= 2 ? (
+                                    <div className="text-center py-12 space-y-3">
+                                        <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center text-gray-500 mx-auto opacity-50">
+                                            <Search size={40} />
+                                        </div>
+                                        <p className="text-gray-400 font-bold uppercase tracking-widest">{t('admin.tournaments.players.noPlayersFound')}</p>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12 opacity-50">
+                                        <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">{t('admin.tournaments.players.typeToSearch')}</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

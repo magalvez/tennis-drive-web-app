@@ -632,6 +632,13 @@
             "registrationRejected": "Registration Rejected",
             "players": {
                 "title": "Players",
+                "selectRegistered": "Select Registered Player",
+                "searchRegisteredPh": "Search by name or email...",
+                "typeToSearch": "Type at least 2 characters to search",
+                "noPlayersFound": "No players found in the database",
+                "alreadyIn": "Already in Category",
+                "alreadyInTournament": "This player is already registered in this category",
+                "successAdd": "Player added successfully",
                 "subtitle": "Manage all registered players and their club points.",
                 "management": {
                     "recalculateAction": "Recalculate XP",

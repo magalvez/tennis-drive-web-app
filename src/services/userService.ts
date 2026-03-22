@@ -15,6 +15,7 @@ export interface UserData {
     uid: string;
     email: string;
     displayName: string;
+    photoURL?: string;
     role?: 'admin' | 'player';
     createdAt?: any;
     clubs?: {
@@ -289,18 +290,47 @@ export const getUserProfile = async (uid: string): Promise<UserData | null> => {
 export const searchUsers = async (searchTerm: string, limitCount = 10): Promise<UserData[]> => {
     try {
         const usersRef = collection(db, "users");
-        // Simple search (case sensitive and needs exact prefix if using where, but we'll fetch and filter for better UX if needed)
-        // For a true search we should use a search index, but here we'll filter by email prefix
-        const q = query(
+        // Simple search (case sensitive for name prefix, email should be lower case in db)
+        const lowerSearch = searchTerm.toLowerCase();
+        
+        const qEmail = query(
             usersRef, 
-            where("email", ">=", searchTerm.toLowerCase()), 
-            where("email", "<=", searchTerm.toLowerCase() + "\uf8ff"),
+            where("email", ">=", lowerSearch), 
+            where("email", "<=", lowerSearch + "\uf8ff"),
             limit(limitCount)
         );
+        
+        // Try searching by displayName too (case sensitive unfortunately)
+        const qName = query(
+            usersRef,
+            where("displayName", ">=", searchTerm),
+            where("displayName", "<=", searchTerm + "\uf8ff"),
+            limit(limitCount)
+        );
+
+        const [emailSnap, nameSnap] = await Promise.all([
+            getDocs(qEmail),
+            getDocs(qName)
+        ]);
+
+        const resultsMap = new Map<string, any>();
+        emailSnap.forEach(doc => resultsMap.set(doc.id, { uid: doc.id, ...doc.data() }));
+        nameSnap.forEach(doc => resultsMap.set(doc.id, { uid: doc.id, ...doc.data() }));
+
+        return Array.from(resultsMap.values()).slice(0, limitCount) as UserData[];
+    } catch (error) {
+        console.error("Error searching users:", error);
+        return [];
+    }
+};
+
+export const getAllPlayers = async (limitCount = 50): Promise<UserData[]> => {
+    try {
+        const q = query(collection(db, "users"), where("role", "==", "player"), limit(limitCount));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
     } catch (error) {
-        console.error("Error searching users:", error);
+        console.error("Error fetching all players:", error);
         return [];
     }
 };
