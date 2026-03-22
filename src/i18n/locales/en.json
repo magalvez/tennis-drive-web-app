@@ -1023,6 +1023,26 @@
                 }
             },
             "footer": "All rights reserved."
+        },
+        "deletion": {
+            "title": "Data Deletion Request",
+            "lastUpdated": "Last updated: March 19, 2026",
+            "sections": {
+                "intro": "At PlayOnCourt, we respect your right to privacy and the control over your personal data. Following the GDPR and platform provider regulations (like Facebook), we provide you with a clear way to request the deletion of your information from our systems.",
+                "howTo": {
+                    "title": "1. How to Request Deletion",
+                    "content": "To delete your account and all associated data, you can do so directly within the mobile app in the 'Profile Settings' section. Alternatively, you can send an email to our support team."
+                },
+                "dataRemoved": {
+                    "title": "2. What Data is Removed",
+                    "content": "Upon processing your request, we will permanently delete your profile information, match history, and any personalized settings associated with your account ID."
+                },
+                "retention": {
+                    "title": "3. Data Retention",
+                    "content": "Please note that some information (like payment records) may be retained for a limited period if required by law or for legitimate financial auditing purposes."
+                },
+                "contact": "To initiate a manual deletion request via email, please contact us at support@playoncourt.com with the subject 'Data Deletion Request'."
+            }
         }
     }
 }

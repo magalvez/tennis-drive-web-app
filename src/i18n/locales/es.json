@@ -1008,6 +1008,26 @@
                 }
             },
             "footer": "Todos los derechos reservados."
+        },
+        "deletion": {
+            "title": "Solicitud de Eliminación de Datos",
+            "lastUpdated": "Última actualización: 19 de marzo de 2026",
+            "sections": {
+                "intro": "En PlayOnCourt, respetamos su derecho a la privacidad y el control sobre sus datos personales. Siguiendo el RGPD y las regulaciones de los proveedores de plataforma (como Facebook), le proporcionamos una forma clara de solicitar la eliminación de su información de nuestros sistemas.",
+                "howTo": {
+                    "title": "1. Cómo solicitar la eliminación",
+                    "content": "Para eliminar su cuenta y todos los datos asociados, puede hacerlo directamente dentro de la aplicación móvil en la sección 'Ajustes del Perfil'. Alternativamente, puede enviar un correo electrónico a nuestro equipo de soporte."
+                },
+                "dataRemoved": {
+                    "title": "2. Qué datos se eliminan",
+                    "content": "Al procesar su solicitud, eliminaremos permanentemente su información de perfil, historial de partidos y cualquier ajuste personalizado asociado con su ID de cuenta."
+                },
+                "retention": {
+                    "title": "3. Retención de datos",
+                    "content": "Tenga en cuenta que parte de la información (como registros de pago) puede conservarse durante un período limitado si así lo requiere la ley o con fines de auditoría financiera legítima."
+                },
+                "contact": "Para iniciar una solicitud de eliminación manual por correo electrónico, contáctenos en support@playoncourt.com con el asunto 'Solicitud de eliminación de datos'."
+            }
         }
     }
 }
