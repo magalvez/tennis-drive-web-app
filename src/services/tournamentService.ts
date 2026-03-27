@@ -713,8 +713,7 @@ export const deleteManualPlayers = async (tournamentId: string, modality: 'singl
         const isDoubles = modality === 'doubles';
         const collectionName = isDoubles ? 'doublesTeams' : 'players';
         const itemsRef = collection(db, 'tournaments', tournamentId, collectionName);
-
-        let q = query(itemsRef, where('isManual', '==', true));
+        let q = query(itemsRef);
         if (category && category !== 'all' as any) {
             q = query(q, where('category', '==', category));
         }
@@ -723,22 +722,69 @@ export const deleteManualPlayers = async (tournamentId: string, modality: 'singl
 
         let count = 0;
         for (const itemDoc of snapshot.docs) {
-            const data = itemDoc.data();
+            const data = itemDoc.data() as any;
+            
+            // Determine if this is a manual entry (either by flag or by checking shadow user)
+            let isManual = data.isManual === true;
+            
+            let u1Manual = false;
+            let u2Manual = false;
 
-            // Cleanup matches
+            if (isDoubles) {
+                if (data.player1Uid) {
+                    const u1Snap = await getDoc(doc(db, 'users', data.player1Uid));
+                    if (u1Snap.exists() && u1Snap.data()?.isManual) u1Manual = true;
+                }
+                if (data.player2Uid) {
+                    const u2Snap = await getDoc(doc(db, 'users', data.player2Uid));
+                    if (u2Snap.exists() && u2Snap.data()?.isManual) u2Manual = true;
+                }
+                // A doubles team is manual if it's flagged or BOTH players are manual
+                if (u1Manual && u2Manual) isManual = true;
+            } else if (data.uid) {
+                const uSnap = await getDoc(doc(db, 'users', data.uid));
+                if (uSnap.exists() && uSnap.data()?.isManual) {
+                    isManual = true;
+                    u1Manual = true;
+                }
+            }
+
+            if (!isManual) continue;
+
+            // Cleanup matches (Restricted to same category)
+            const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
             const matchQueries = [];
             if (isDoubles) {
-                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('team1Id', '==', itemDoc.id)));
-                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('team2Id', '==', itemDoc.id)));
+                let q1 = query(matchesRef, where('team1Id', '==', itemDoc.id));
+                let q2 = query(matchesRef, where('team2Id', '==', itemDoc.id));
+                if (category) {
+                    q1 = query(q1, where('category', '==', category));
+                    q2 = query(q2, where('category', '==', category));
+                }
+                matchQueries.push(q1, q2);
             } else {
-                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('player1Uid', '==', data.uid)));
-                matchQueries.push(query(collection(db, 'tournaments', tournamentId, 'matches'), where('player2Uid', '==', data.uid)));
+                let q1 = query(matchesRef, where('player1Uid', '==', data.uid));
+                let q2 = query(matchesRef, where('player2Uid', '==', data.uid));
+                if (category) {
+                    q1 = query(q1, where('category', '==', category));
+                    q2 = query(q2, where('category', '==', category));
+                }
+                matchQueries.push(q1, q2);
             }
 
             const matchSnaps = await Promise.all(matchQueries.map(q => getDocs(q)));
             const matchDocs = matchSnaps.flatMap(s => s.docs);
 
             await Promise.all(matchDocs.map(d => deleteDoc(d.ref)));
+
+            // Cleanup shadow users
+            if (u1Manual && (!isDoubles ? data.uid : data.player1Uid)) {
+                await deleteDoc(doc(db, 'users', !isDoubles ? data.uid : data.player1Uid));
+            }
+            if (u2Manual && data.player2Uid) {
+                await deleteDoc(doc(db, 'users', data.player2Uid));
+            }
+
             await deleteDoc(itemDoc.ref);
             count++;
         }

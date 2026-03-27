@@ -341,7 +341,8 @@ const TournamentPlayersPage = () => {
                     email: email || undefined,
                     isWildcard: newPlayer.isWildcard,
                     category: cat,
-                    registrationStatus: 'approved'
+                    registrationStatus: 'approved',
+                    isManual: true
                 });
             }
 
@@ -399,7 +400,7 @@ const TournamentPlayersPage = () => {
                     } else {
                         const name = `Test Player ${rnd}`;
                         const u = await addDoc(collection(db, 'users'), { displayName: name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
-                        await addPlayerToTournament(id, { name, uid: u.id, category: catToUse, registrationStatus: 'approved' });
+                        await addPlayerToTournament(id, { name, uid: u.id, category: catToUse, registrationStatus: 'approved', isManual: true });
                     }
                 })());
             }
@@ -1078,8 +1079,10 @@ const TournamentPlayersPage = () => {
                                         confirmModal.onConfirm().then(() => setConfirmModal({ ...confirmModal, open: false }));
                                     }
                                 }}
-                                className={`flex-1 py-4 ${confirmModal.type === 'success' ? 'bg-tennis-green text-tennis-dark' : 'bg-red-500 text-white'} font-black rounded-2xl transition-all uppercase tracking-widest shadow-lg`}
+                                disabled={processing}
+                                className={`flex-1 py-4 ${confirmModal.type === 'success' ? 'bg-tennis-green text-tennis-dark' : 'bg-red-500 text-white'} font-black rounded-2xl transition-all uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 disabled:opacity-50`}
                             >
+                                {processing && confirmModal.type !== 'success' && <RefreshCw size={20} className="animate-spin" />}
                                 {confirmModal.type === 'success' ? t('common.close') : t('common.confirm')}
                             </button>
                         </div>
