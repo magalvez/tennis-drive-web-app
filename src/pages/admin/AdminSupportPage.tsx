@@ -14,6 +14,8 @@ import {
 import { getClubById } from '../../services/clubService';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { col } from '../../config/environment';
+
 
 const AdminSupportPage = () => {
     const { user, managedClubId } = useAuth();
@@ -32,7 +34,7 @@ const AdminSupportPage = () => {
     useEffect(() => {
         if (!user) return;
         const q = query(
-            collection(db, "manager_chats"),
+            collection(db, col('manager_chats')),
             where("adminId", "==", user.uid),
             where("status", "==", activeTab),
             orderBy("lastMessageAt", "desc")

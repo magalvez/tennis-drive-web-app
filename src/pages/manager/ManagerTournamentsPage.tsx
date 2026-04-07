@@ -6,6 +6,8 @@ import { toggleTournamentBlock, removeTournament } from '../../services/managerS
 import { useAuth } from '../../context/AuthContext';
 import { type TournamentData } from '../../services/types';
 import { useLanguage } from '../../context/LanguageContext';
+import { col } from '../../config/environment';
+
 
 const ManagerTournamentsPage = () => {
     const { user } = useAuth();
@@ -15,7 +17,7 @@ const ManagerTournamentsPage = () => {
 
     const fetchData = async () => {
         try {
-            const q = query(collection(db, "tournaments"), orderBy("createdAt", "desc"));
+            const q = query(collection(db, col('tournaments')), orderBy("createdAt", "desc"));
             const snap = await getDocs(q);
             setTournaments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)).filter(t => t.status !== 'removed'));
         } catch (error) {

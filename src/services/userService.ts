@@ -2,6 +2,8 @@ import { collection, collectionGroup, doc, documentId, getDoc, getDocs, incremen
 import { db } from "../config/firebase";
 import { getClubById } from './clubService';
 import type { Match } from './types';
+import { col } from '../config/environment';
+
 
 const chunk = <T>(array: T[], size: number): T[][] => {
     const chunks: T[][] = [];
@@ -31,7 +33,7 @@ export interface UserData {
 
 export const updateUser = async (uid: string, data: Partial<UserData>) => {
     try {
-        const userRef = doc(db, "users", uid);
+        const userRef = doc(db, col('users'), uid);
         await updateDoc(userRef, data);
     } catch (error) {
         console.error("Error updating user:", error);
@@ -41,7 +43,7 @@ export const updateUser = async (uid: string, data: Partial<UserData>) => {
 
 export const getClubPlayers = async (clubId: string) => {
     try {
-        const tournamentsRef = collection(db, "tournaments");
+        const tournamentsRef = collection(db, col('tournaments'));
         const q = query(tournamentsRef, where("clubId", "==", clubId));
         const tournamentSnap = await getDocs(q);
 
@@ -51,7 +53,7 @@ export const getClubPlayers = async (clubId: string) => {
         const playersMap = new Map<string, any>();
 
         for (const tId of tournamentIds) {
-            const playersRef = collection(db, "tournaments", tId, "players");
+            const playersRef = collection(db, col('tournaments'), tId, "players");
             const playersSnap = await getDocs(playersRef);
             playersSnap.forEach(docSnap => {
                 const pData = docSnap.data();
@@ -77,7 +79,7 @@ export const getClubPlayers = async (clubId: string) => {
             const uidBatches = chunk(realPlayerUids, 30);
             for (const uidBatch of uidBatches) {
                 const usersQuery = query(
-                    collection(db, "users"),
+                    collection(db, col('users')),
                     where(documentId(), "in", uidBatch)
                 );
                 const usersSnap = await getDocs(usersQuery);
@@ -119,7 +121,7 @@ export const recalculateClubPoints = async (clubId: string) => {
         if (!club) return;
         const scoring = club.scoringConfig || { win: 3, loss: 0, withdraw: 0 };
 
-        const tournamentsRef = collection(db, "tournaments");
+        const tournamentsRef = collection(db, col('tournaments'));
         const tq = query(tournamentsRef, where("clubId", "==", clubId));
         const tournamentSnap = await getDocs(tq);
         const tournamentIds = tournamentSnap.docs.map(doc => doc.id);
@@ -129,7 +131,7 @@ export const recalculateClubPoints = async (clubId: string) => {
         const playerPoints: Record<string, number> = {};
 
         for (const tId of tournamentIds) {
-            const playersRef = collection(db, "tournaments", tId, "players");
+            const playersRef = collection(db, col('tournaments'), tId, "players");
             const playerSnap = await getDocs(playersRef);
             playerSnap.forEach(pDoc => {
                 const pData = pDoc.data();
@@ -138,7 +140,7 @@ export const recalculateClubPoints = async (clubId: string) => {
         }
 
         for (const tId of tournamentIds) {
-            const matchesRef = collection(db, "tournaments", tId, "matches");
+            const matchesRef = collection(db, col('tournaments'), tId, "matches");
             const mq = query(matchesRef, where("status", "==", "completed"));
             const matchSnap = await getDocs(mq);
 
@@ -165,7 +167,7 @@ export const recalculateClubPoints = async (clubId: string) => {
             const batch = writeBatch(db);
             const batchChunk = uids.slice(i, i + 500);
             for (const uid of batchChunk) {
-                const userRef = doc(db, "users", uid);
+                const userRef = doc(db, col('users'), uid);
                 batch.update(userRef, {
                     [`clubs.${clubId}.points`]: playerPoints[uid]
                 });
@@ -204,7 +206,7 @@ export const recalculateGlobalRankings = async () => {
             const batchChunk = uids.slice(i, i + 500);
             for (const uid of batchChunk) {
                 if (uid.startsWith('manual_')) continue;
-                const userRef = doc(db, 'users', uid);
+                const userRef = doc(db, col('users'), uid);
                 batch.update(userRef, {
                     'tennisProfile.points': increment(xpChanges[uid])
                 });
@@ -219,7 +221,7 @@ export const recalculateGlobalRankings = async () => {
 
 export const getAdmins = async (clubId?: string): Promise<UserData[]> => {
     try {
-        let q = query(collection(db, "users"), where("role", "==", "admin"));
+        let q = query(collection(db, col('users')), where("role", "==", "admin"));
         if (clubId) {
             q = query(q, where("managedClubId", "==", clubId));
         }
@@ -233,7 +235,7 @@ export const getAdmins = async (clubId?: string): Promise<UserData[]> => {
 
 export const promoteUserByEmail = async (email: string, clubId?: string): Promise<boolean> => {
     try {
-        const q = query(collection(db, "users"), where("email", "==", email));
+        const q = query(collection(db, col('users')), where("email", "==", email));
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
@@ -264,7 +266,7 @@ export const promoteUserByEmail = async (email: string, clubId?: string): Promis
 
 export const removeAdminRole = async (uid: string): Promise<void> => {
     try {
-        const userRef = doc(db, "users", uid);
+        const userRef = doc(db, col('users'), uid);
         await updateDoc(userRef, {
             role: 'player',
             managedClubId: null
@@ -276,7 +278,7 @@ export const removeAdminRole = async (uid: string): Promise<void> => {
 };
 export const getUserProfile = async (uid: string): Promise<UserData | null> => {
     try {
-        const userRef = doc(db, "users", uid);
+        const userRef = doc(db, col('users'), uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
             return { uid: userSnap.id, ...userSnap.data() } as UserData;
@@ -289,7 +291,7 @@ export const getUserProfile = async (uid: string): Promise<UserData | null> => {
 };
 export const searchUsers = async (searchTerm: string, limitCount = 10): Promise<UserData[]> => {
     try {
-        const usersRef = collection(db, "users");
+        const usersRef = collection(db, col('users'));
         // Simple search (case sensitive for name prefix, email should be lower case in db)
         const lowerSearch = searchTerm.toLowerCase();
         
@@ -326,7 +328,7 @@ export const searchUsers = async (searchTerm: string, limitCount = 10): Promise<
 
 export const getAllPlayers = async (limitCount = 50): Promise<UserData[]> => {
     try {
-        const q = query(collection(db, "users"), where("role", "==", "player"), limit(limitCount));
+        const q = query(collection(db, col('users')), where("role", "==", "player"), limit(limitCount));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
     } catch (error) {

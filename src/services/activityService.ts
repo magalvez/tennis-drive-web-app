@@ -1,5 +1,7 @@
 import { addDoc, collection, limit as firestoreLimit, getDocs, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 export type ActivityType = 'transaction' | 'tournament_create' | 'tournament_join' | 'tournament_withdraw' | 'user_register' | 'match_complete';
 
@@ -21,7 +23,7 @@ export const logActivity = async (
     clubId?: string
 ) => {
     try {
-        const activitiesRef = collection(db, 'activities');
+        const activitiesRef = collection(db, col('activities'));
         const activityData: any = {
             type,
             title,
@@ -42,7 +44,7 @@ export const logActivity = async (
 
 export const getRecentActivities = async (limitCount: number = 20, clubId?: string): Promise<Activity[]> => {
     try {
-        const activitiesRef = collection(db, 'activities');
+        const activitiesRef = collection(db, col('activities'));
         let q;
         if (clubId) {
             q = query(
@@ -71,7 +73,7 @@ export const subscribeToRecentActivities = (
     clubId: string | undefined,
     callback: (activities: Activity[]) => void
 ) => {
-    const activitiesRef = collection(db, 'activities');
+    const activitiesRef = collection(db, col('activities'));
     let q;
     if (clubId) {
         q = query(

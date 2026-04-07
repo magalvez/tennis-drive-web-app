@@ -1,10 +1,12 @@
 import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 // Helper to get a user's push token
 export const getUserPushToken = async (uid: string): Promise<string | null> => {
     try {
-        const userRef = doc(db, 'users', uid);
+        const userRef = doc(db, col('users'), uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
             return userSnap.data().pushToken || null;
@@ -23,27 +25,9 @@ const PUSH_RELAY_URL = import.meta.env.DEV
 
 // Send a single notification via Expo Push API
 export const sendPushNotification = async (expoPushToken: string, title: string, body: string, data: any = {}) => {
-    const message = {
-        to: expoPushToken,
-        sound: 'default',
-        title: title,
-        body: body,
-        data: data,
-    };
-
-    try {
-        await fetch(PUSH_RELAY_URL, {
-            method: 'POST',
-            headers: {
-                Accept: 'application/json',
-                'Accept-encoding': 'gzip, deflate',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify([message]), // Send as array per Expo API
-        });
-    } catch (error) {
-        console.error("Error sending push notification:", error);
-    }
+    // Temporarily disabled for testing
+    console.log(`[Push Notification (DISABLED)] To: ${expoPushToken}, Title: ${title}, Body: ${body}`);
+    return;
 };
 
 export const addNotification = async (
@@ -54,7 +38,7 @@ export const addNotification = async (
     referenceId?: string
 ) => {
     try {
-        await addDoc(collection(db, "users", targetUid, "notifications"), {
+        await addDoc(collection(db, col('users'), targetUid, "notifications"), {
             title,
             body,
             date: Timestamp.now(),
@@ -79,7 +63,7 @@ export interface NotificationItem {
 
 export const getUserNotifications = async (uid: string, limitCount = 20) => {
     try {
-        const notifsRef = collection(db, "users", uid, "notifications");
+        const notifsRef = collection(db, col('users'), uid, "notifications");
         const q = query(notifsRef, orderBy("date", "desc"), limit(limitCount));
         const snapshot = await getDocs(q);
 
@@ -118,7 +102,7 @@ export const notifyPlayerRejected = async (uid: string, title: string, body: str
 
 export const getAllPushTokens = async (clubId?: string): Promise<string[]> => {
     try {
-        const usersRef = collection(db, 'users');
+        const usersRef = collection(db, col('users'));
         let q;
         if (clubId) {
             q = query(usersRef, where(`clubs.${clubId}`, "!=", null));
@@ -134,35 +118,9 @@ export const getAllPushTokens = async (clubId?: string): Promise<string[]> => {
 };
 
 export const sendPushNotificationsBatch = async (tokens: string[], title: string, body: string, data: any = {}) => {
-    // Expo limit is 100 messages per chunk
-    const chunks = [];
-    for (let i = 0; i < tokens.length; i += 100) {
-        chunks.push(tokens.slice(i, i + 100));
-    }
-
-    for (const chunk of chunks) {
-        const messages = chunk.map(token => ({
-            to: token,
-            sound: 'default',
-            title,
-            body,
-            data
-        }));
-
-        try {
-            await fetch(PUSH_RELAY_URL, {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Accept-encoding': 'gzip, deflate',
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(messages), // Send as array per Expo API
-            });
-        } catch (error) {
-            console.error("Error sending batch push notifications:", error);
-        }
-    }
+    // Temporarily disabled for testing
+    console.log(`[Push Batch (DISABLED)] To ${tokens.length} users: ${title}`);
+    return;
 };
 
 export interface UserWithToken {
@@ -174,7 +132,7 @@ export interface UserWithToken {
 
 export const getUsersWithTokens = async (clubId?: string): Promise<UserWithToken[]> => {
     try {
-        const usersRef = collection(db, 'users');
+        const usersRef = collection(db, col('users'));
         let q;
         if (clubId) {
             q = query(usersRef, where(`clubs.${clubId}`, "!=", null));

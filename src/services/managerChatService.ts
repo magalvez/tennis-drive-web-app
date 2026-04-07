@@ -1,5 +1,7 @@
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, Timestamp, where, limit, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 export interface ManagerChatMessage {
     id?: string;
@@ -30,7 +32,7 @@ export interface ManagerChat {
 export const getOrCreateManagerChat = async (managerId: string, adminId: string, clubId: string, clubName: string, managerName?: string): Promise<string> => {
     try {
         const q = query(
-            collection(db, "manager_chats"),
+            collection(db, col('manager_chats')),
             where("managerId", "==", managerId),
             where("adminId", "==", adminId),
             where("status", "==", "active")
@@ -53,7 +55,7 @@ export const getOrCreateManagerChat = async (managerId: string, adminId: string,
             status: 'active'
         };
 
-        const docRef = await addDoc(collection(db, "manager_chats"), newChat);
+        const docRef = await addDoc(collection(db, col('manager_chats')), newChat);
         return docRef.id;
     } catch (error) {
         console.error("Error get/create manager chat:", error);
@@ -63,7 +65,7 @@ export const getOrCreateManagerChat = async (managerId: string, adminId: string,
 
 export const resetUnreadCount = async (chatId: string, role: 'manager' | 'admin') => {
     try {
-        const chatRef = doc(db, "manager_chats", chatId);
+        const chatRef = doc(db, col('manager_chats'), chatId);
         if (role === 'manager') {
             await updateDoc(chatRef, { unreadCountManager: 0 });
         } else {
@@ -75,7 +77,7 @@ export const resetUnreadCount = async (chatId: string, role: 'manager' | 'admin'
 };
 
 export const getChatData = async (chatId: string): Promise<ManagerChat> => {
-    const docSnap = await getDoc(doc(db, "manager_chats", chatId));
+    const docSnap = await getDoc(doc(db, col('manager_chats'), chatId));
     if (!docSnap.exists()) throw new Error("Chat not found");
     return { id: docSnap.id, ...docSnap.data() } as ManagerChat;
 };
@@ -85,7 +87,7 @@ export const getChatData = async (chatId: string): Promise<ManagerChat> => {
  */
 export const sendManagerMessage = async (chatId: string, senderId: string, role: 'manager' | 'admin', content: string) => {
     try {
-        const chatRef = doc(db, "manager_chats", chatId);
+        const chatRef = doc(db, col('manager_chats'), chatId);
         const chatSnap = await getDoc(chatRef);
         if (!chatSnap.exists()) throw new Error("Chat not found");
         const chatData = chatSnap.data() as ManagerChat;
@@ -102,7 +104,7 @@ export const sendManagerMessage = async (chatId: string, senderId: string, role:
             timestamp: Timestamp.now()
         };
 
-        await addDoc(collection(db, "manager_chats", chatId, "messages"), message);
+        await addDoc(collection(db, col('manager_chats'), chatId, "messages"), message);
 
         // Update chat head
         const updates: any = {
@@ -128,7 +130,7 @@ export const sendManagerMessage = async (chatId: string, senderId: string, role:
  */
 export const subscribeToManagerMessages = (chatId: string, callback: (messages: ManagerChatMessage[]) => void) => {
     const q = query(
-        collection(db, "manager_chats", chatId, "messages"),
+        collection(db, col('manager_chats'), chatId, "messages"),
         orderBy("timestamp", "desc"),
         limit(50)
     );
@@ -147,7 +149,7 @@ export const subscribeToManagerMessages = (chatId: string, callback: (messages: 
  */
 export const closeManagerChat = async (chatId: string) => {
     try {
-        const chatRef = doc(db, "manager_chats", chatId);
+        const chatRef = doc(db, col('manager_chats'), chatId);
         await updateDoc(chatRef, { 
             status: 'closed',
             lastMessage: 'Chat closed',
@@ -163,7 +165,7 @@ export const closeManagerChat = async (chatId: string) => {
  * Subscribe to chat head data
  */
 export const subscribeToChatHead = (chatId: string, callback: (chat: ManagerChat) => void) => {
-    const chatRef = doc(db, "manager_chats", chatId);
+    const chatRef = doc(db, col('manager_chats'), chatId);
     return onSnapshot(chatRef, (snapshot) => {
         if (snapshot.exists()) {
             callback({ id: snapshot.id, ...snapshot.data() } as ManagerChat);
@@ -176,7 +178,7 @@ export const subscribeToChatHead = (chatId: string, callback: (chat: ManagerChat
  */
 export const getSupportManager = async (): Promise<{ uid: string, name: string } | null> => {
     try {
-        const managersRef = collection(db, 'users');
+        const managersRef = collection(db, col('users'));
         const q = query(managersRef, where('role', '==', 'manager'), limit(1));
         const snapshot = await getDocs(q);
         
@@ -200,7 +202,7 @@ export const getSupportManager = async (): Promise<{ uid: string, name: string }
  */
 export const getAllManagers = async (): Promise<{ uid: string, name: string }[]> => {
     try {
-        const q = query(collection(db, "users"), where("role", "==", "manager"));
+        const q = query(collection(db, col('users')), where("role", "==", "manager"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({
             uid: doc.id,

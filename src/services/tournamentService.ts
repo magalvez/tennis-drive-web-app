@@ -6,6 +6,8 @@ import { logActivity } from './activityService';
 import { createGroup } from './groupService';
 import { advanceWinner } from './bracketService';
 import type { Match, SetScore, TournamentCategory, TournamentData, TournamentPlayer } from './types';
+import { col } from '../config/environment';
+
 
 export const CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'rookie'];
 export const TENNIS_CATEGORY_ORDER: TournamentCategory[] = ['open', 'first', 'second', 'third', 'fourth', 'fifth', 'rookie'];
@@ -28,7 +30,7 @@ export const createTournament = async (data: Omit<TournamentData, 'status' | 'cr
             }
         }
 
-        const docRef = await addDoc(collection(db, "tournaments"), tournamentData);
+        const docRef = await addDoc(collection(db, col('tournaments')), tournamentData);
         await logActivity(
             'tournament_create',
             'Tournament Created',
@@ -45,7 +47,7 @@ export const createTournament = async (data: Omit<TournamentData, 'status' | 'cr
 
 export const getTournamentsByClub = async (clubId: string) => {
     try {
-        const q = query(collection(db, "tournaments"), where("clubId", "==", clubId), orderBy("createdAt", "desc"));
+        const q = query(collection(db, col('tournaments')), where("clubId", "==", clubId), orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TournamentData));
     } catch (error) {
@@ -56,15 +58,15 @@ export const getTournamentsByClub = async (clubId: string) => {
 
 export const deleteTournament = async (id: string) => {
     try {
-        const matchesQuery = query(collection(db, "tournaments", id, "matches"));
+        const matchesQuery = query(collection(db, col('tournaments'), id, "matches"));
         const matchesSnapshot = await getDocs(matchesQuery);
         await Promise.all(matchesSnapshot.docs.map(doc => deleteDoc(doc.ref)));
 
-        const playersQuery = query(collection(db, "tournaments", id, "players"));
+        const playersQuery = query(collection(db, col('tournaments'), id, "players"));
         const playersSnapshot = await getDocs(playersQuery);
         await Promise.all(playersSnapshot.docs.map(doc => deleteDoc(doc.ref)));
 
-        await deleteDoc(doc(db, "tournaments", id));
+        await deleteDoc(doc(db, col('tournaments'), id));
     } catch (error) {
         console.error(error);
         throw error;
@@ -73,7 +75,7 @@ export const deleteTournament = async (id: string) => {
 
 export const getTournamentById = async (id: string) => {
     try {
-        const docRef = doc(db, "tournaments", id);
+        const docRef = doc(db, col('tournaments'), id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             return { id: docSnap.id, ...docSnap.data() } as TournamentData;
@@ -87,7 +89,7 @@ export const getTournamentById = async (id: string) => {
 
 export const updateTournament = async (id: string, data: Partial<TournamentData>) => {
     try {
-        const docRef = doc(db, "tournaments", id);
+        const docRef = doc(db, col('tournaments'), id);
         await updateDoc(docRef, data);
 
         // BILLING TRIGGER: If status is set to 'completed', calculate fees
@@ -106,7 +108,7 @@ export const updateTournament = async (id: string, data: Partial<TournamentData>
 
 export const getTournamentPlayers = async (tournamentId: string) => {
     try {
-        const q = query(collection(db, "tournaments", tournamentId, "players"), orderBy("addedAt", "desc"));
+        const q = query(collection(db, col('tournaments'), tournamentId, "players"), orderBy("addedAt", "desc"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TournamentPlayer))
             .sort((a, b) => (a.group || 'Z').localeCompare(b.group || 'Z'));
@@ -118,7 +120,7 @@ export const getTournamentPlayers = async (tournamentId: string) => {
 
 export const getTournamentMatches = async (tournamentId: string) => {
     try {
-        const q = query(collection(db, "tournaments", tournamentId, "matches"));
+        const q = query(collection(db, col('tournaments'), tournamentId, "matches"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
     } catch (error) {
@@ -171,28 +173,31 @@ export const assignGroupsToPlayers = async (
             throw new Error(`PLAYERS_NOT_READY: ${names}`);
         }
 
-        // 1. Fetch points for items who don't have a manual seed
+        // 1. Calculate rankValue based on fixed seeds (manual or automatic) or points
         const itemsWithRank = await Promise.all(
             items.map(async (item) => {
-                let rankValue = item.seed ? (10000 - item.seed) : 0; // Manual seeds take priority
+                // Fixed seeds (1-100) are mapped to high rankValue (9900-10000)
+                // This ensures they are always sorted before points-based ranks
+                const isFixedSeed = item.seed && (item.seedType === 'manual' || item.seedType === 'automatic');
+                let rankValue = isFixedSeed ? (10000 - item.seed) : 0;
 
-                if (!item.seed && !item.isManual) {
+                if (rankValue === 0 && !item.isManual) {
                     if (isDoubles) {
                         // Combined points for doubles
                         let p1Points = 0;
                         let p2Points = 0;
                         if (item.player1Uid && tournament.clubId) {
-                            const u1 = await getDoc(doc(db, 'users', item.player1Uid));
+                            const u1 = await getDoc(doc(db, col('users'), item.player1Uid));
                             p1Points = u1.exists() ? (u1.data()?.clubs?.[tournament.clubId]?.points || 0) : 0;
                         }
                         if (item.player2Uid && tournament.clubId) {
-                            const u2 = await getDoc(doc(db, 'users', item.player2Uid));
+                            const u2 = await getDoc(doc(db, col('users'), item.player2Uid));
                             p2Points = u2.exists() ? (u2.data()?.clubs?.[tournament.clubId]?.points || 0) : 0;
                         }
                         rankValue = p1Points + p2Points;
                     } else if (item.uid && tournament.clubId) {
                         try {
-                            const userDoc = await getDoc(doc(db, 'users', item.uid));
+                            const userDoc = await getDoc(doc(db, col('users'), item.uid));
                             if (userDoc.exists()) {
                                 const userData = userDoc.data();
                                 rankValue = userData?.clubs?.[tournament.clubId]?.points ?? 0;
@@ -224,11 +229,12 @@ export const assignGroupsToPlayers = async (
                 : (numberOfGroups - 1 - posInRow);
 
             const groupName = groupLetters[groupIndex];
-            const itemRef = doc(db, "tournaments", tournamentId, isDoubles ? "doublesTeams" : "players", item.id);
+            const itemRef = doc(db, col('tournaments'), tournamentId, isDoubles ? "doublesTeams" : "players", item.id);
 
             batch.update(itemRef, {
                 group: groupName,
-                seed: index + 1 // Assign official tournament seed
+                seed: index + 1, // Assign official tournament seed
+                seedType: item.seedType === 'manual' ? 'manual' : 'automatic'
             });
 
             if (!groupPlayerMap[groupName]) groupPlayerMap[groupName] = [];
@@ -248,10 +254,10 @@ export const assignGroupsToPlayers = async (
     }
 };
 
-export const updatePlayerSeed = async (tournamentId: string, playerId: string, seed: number | null) => {
+export const updatePlayerSeed = async (tournamentId: string, playerId: string, seed: number | null, seedType: 'manual' | 'automatic' = 'manual') => {
     try {
-        const playerRef = doc(db, "tournaments", tournamentId, "players", playerId);
-        await updateDoc(playerRef, { seed });
+        const playerRef = doc(db, col('tournaments'), tournamentId, "players", playerId);
+        await updateDoc(playerRef, { seed, seedType: seed === null ? null : seedType });
         return true;
     } catch (error) {
         console.error(error);
@@ -267,12 +273,17 @@ export const autoSeedPlayers = async (tournamentId: string, category?: Tournamen
         let players = await getTournamentPlayers(tournamentId);
         if (category) players = players.filter(p => p.category === category);
 
-        // Fetch points
+        // Reserved seeds from manual assignment
+        const manuallySeeded = players.filter(p => p.seed && p.seedType === 'manual');
+        const usedSeeds = new Set(manuallySeeded.map(p => p.seed!));
+        const playersToAutoSeed = players.filter(p => !p.seed || p.seedType !== 'manual');
+
+        // Fetch points for players to auto-seed
         const playersWithRank = await Promise.all(
-            players.map(async (player) => {
+            playersToAutoSeed.map(async (player) => {
                 let points = 0;
                 if (player.uid && !player.isManual) {
-                    const userDoc = await getDoc(doc(db, 'users', player.uid));
+                    const userDoc = await getDoc(doc(db, col('users'), player.uid));
                     if (userDoc.exists()) {
                         points = userDoc.data()?.clubs?.[tournament.clubId!]?.points ?? 0;
                     }
@@ -285,9 +296,15 @@ export const autoSeedPlayers = async (tournamentId: string, category?: Tournamen
         const sorted = [...playersWithRank].sort((a, b) => b.points - a.points);
 
         const batch = writeBatch(db);
-        sorted.forEach((p, idx) => {
-            const playerRef = doc(db, "tournaments", tournamentId, "players", p.id);
-            batch.update(playerRef, { seed: idx + 1 });
+        let currentSeed = 1;
+        sorted.forEach((p) => {
+            while (usedSeeds.has(currentSeed)) {
+                currentSeed++;
+            }
+            const playerRef = doc(db, col('tournaments'), tournamentId, "players", p.id);
+            batch.update(playerRef, { seed: currentSeed, seedType: 'automatic' });
+            usedSeeds.add(currentSeed);
+            currentSeed++;
         });
 
         await batch.commit();
@@ -326,7 +343,7 @@ export const generateGroupStageMatches = async (tournamentId: string, category?:
             }
         });
 
-        const matchesCollection = collection(db, "tournaments", tournamentId, "matches");
+        const matchesCollection = collection(db, col('tournaments'), tournamentId, "matches");
         for (const [groupName, groupItems] of Object.entries(itemsByGroup)) {
             for (let i = 0; i < groupItems.length; i++) {
                 for (let j = i + 1; j < groupItems.length; j++) {
@@ -376,7 +393,7 @@ export const saveMatchScoreByAdmin = async (
     data: { sets: any[], winnerId: string, isWithdrawal?: boolean }
 ) => {
     try {
-        const matchRef = doc(db, "tournaments", tournamentId, "matches", matchId);
+        const matchRef = doc(db, col('tournaments'), tournamentId, "matches", matchId);
         const matchSnap = await getDoc(matchRef);
         if (!matchSnap.exists()) throw new Error("Match not found");
         const matchData = matchSnap.data() as Match;
@@ -402,7 +419,7 @@ export const saveMatchScoreByAdmin = async (
             const loserId = data.winnerId === matchData.player1Uid ? matchData.player2Uid : matchData.player1Uid;
 
             if (data.winnerId && !data.winnerId.startsWith('manual_')) {
-                await updateDoc(doc(db, "users", data.winnerId), {
+                await updateDoc(doc(db, col('users'), data.winnerId), {
                     [`clubs.${tournament.clubId}.points`]: increment(scoring.win),
                     "tennisProfile.points": increment(50)
                 });
@@ -410,7 +427,7 @@ export const saveMatchScoreByAdmin = async (
 
             if (loserId && !loserId.startsWith('manual_')) {
                 const loserPoints = data.isWithdrawal ? scoring.withdraw : scoring.loss;
-                await updateDoc(doc(db, "users", loserId), {
+                await updateDoc(doc(db, col('users'), loserId), {
                     [`clubs.${tournament.clubId}.points`]: increment(loserPoints),
                     "tennisProfile.points": increment(-15)
                 });
@@ -430,14 +447,14 @@ export const resetGroupStage = async (tournamentId: string, category?: Tournamen
     try {
         const isDoubles = modality === 'doubles';
         const matchesQuery = category
-            ? query(collection(db, "tournaments", tournamentId, "matches"), where("category", "==", category))
-            : query(collection(db, "tournaments", tournamentId, "matches"));
+            ? query(collection(db, col('tournaments'), tournamentId, "matches"), where("category", "==", category))
+            : query(collection(db, col('tournaments'), tournamentId, "matches"));
         const matchesSnapshot = await getDocs(matchesQuery);
         await Promise.all(matchesSnapshot.docs.filter(d => !!d.data().isDoubles === isDoubles).map(d => deleteDoc(d.ref)));
 
         const groupsQuery = category
-            ? query(collection(db, "tournaments", tournamentId, "groups"), where("category", "==", category))
-            : query(collection(db, "tournaments", tournamentId, "groups"));
+            ? query(collection(db, col('tournaments'), tournamentId, "groups"), where("category", "==", category))
+            : query(collection(db, col('tournaments'), tournamentId, "groups"));
         const groupsSnapshot = await getDocs(groupsQuery);
         await Promise.all(groupsSnapshot.docs.filter(d => !!d.data().isDoubles === isDoubles).map(d => deleteDoc(d.ref)));
 
@@ -447,13 +464,13 @@ export const resetGroupStage = async (tournamentId: string, category?: Tournamen
             let teams = await getDoublesTeams(tournamentId);
             if (category) teams = teams.filter(t => t.category === category);
             teams.forEach(t => {
-                if (t.group) batch.update(doc(db, "tournaments", tournamentId, "doublesTeams", t.id), { group: null });
+                if (t.group) batch.update(doc(db, col('tournaments'), tournamentId, "doublesTeams", t.id), { group: null });
             });
         } else {
             const players = await getTournamentPlayers(tournamentId);
             const filteredPlayers = category ? players.filter(p => p.category === category) : players;
             filteredPlayers.forEach(p => {
-                if (p.group) batch.update(doc(db, "tournaments", tournamentId, "players", p.id), { group: null });
+                if (p.group) batch.update(doc(db, col('tournaments'), tournamentId, "players", p.id), { group: null });
             });
         }
         await batch.commit();
@@ -472,7 +489,7 @@ export const assignChampion = async (
     loser?: { uid: string; name: string }
 ) => {
     try {
-        const tournamentRef = doc(db, 'tournaments', tournamentId);
+        const tournamentRef = doc(db, col('tournaments'), tournamentId);
         const tSnap = await getDoc(tournamentRef);
         const tData = tSnap.data();
         const champions = tData?.champions || {};
@@ -490,7 +507,7 @@ export const assignChampion = async (
 
         // Also add to User's Hall of Fame
         if (winner.uid && !winner.uid.startsWith('manual_')) {
-            const userRef = doc(db, 'users', winner.uid);
+            const userRef = doc(db, col('users'), winner.uid);
             await updateDoc(userRef, {
                 hallOfFame: increment(1), // Minimal for now, mobile adds full object
             } as any);
@@ -508,7 +525,7 @@ export const removeChampion = async (
     category?: TournamentCategory
 ) => {
     try {
-        const tournamentRef = doc(db, 'tournaments', tournamentId);
+        const tournamentRef = doc(db, col('tournaments'), tournamentId);
         const tSnap = await getDoc(tournamentRef);
         if (!tSnap.exists()) return;
 
@@ -552,7 +569,7 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
         const batch = writeBatch(db);
 
         for (const match of scheduledGroupMatches) {
-            const matchRef = doc(db, "tournaments", tournamentId, "matches", match.id);
+            const matchRef = doc(db, col('tournaments'), tournamentId, "matches", match.id);
 
             // 1. Determine Winner
             let winnerId = '';
@@ -620,8 +637,8 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
 
             if (match.isDoubles) {
                 // Fetch team members if we don't have them in the match object
-                const team1Doc = await getDoc(doc(db, "tournaments", tournamentId, "doublesTeams", match.team1Id!));
-                const team2Doc = await getDoc(doc(db, "tournaments", tournamentId, "doublesTeams", match.team2Id!));
+                const team1Doc = await getDoc(doc(db, col('tournaments'), tournamentId, "doublesTeams", match.team1Id!));
+                const team2Doc = await getDoc(doc(db, col('tournaments'), tournamentId, "doublesTeams", match.team2Id!));
 
                 if (team1Doc.exists() && team2Doc.exists()) {
                     const t1 = team1Doc.data();
@@ -642,7 +659,7 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
             for (const uid of winners) {
                 if (uid && !uid.startsWith('manual_')) {
                     try {
-                        await updateDoc(doc(db, "users", uid), {
+                        await updateDoc(doc(db, col('users'), uid), {
                             "tennisProfile.points": increment(50),
                             ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.win ?? 3) })
                         });
@@ -655,7 +672,7 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
             for (const uid of losers) {
                 if (uid && !uid.startsWith('manual_')) {
                     try {
-                        await updateDoc(doc(db, "users", uid), {
+                        await updateDoc(doc(db, col('users'), uid), {
                             "tennisProfile.points": increment(-15),
                             ...(clubId && { [`clubs.${clubId}.points`]: increment(scoring.loss ?? 0) })
                         });
@@ -677,7 +694,7 @@ export const simulateGroupMatchResults = async (tournamentId: string, category?:
 
 export const addPlayerToTournament = async (tournamentId: string, player: Partial<TournamentPlayer>) => {
     try {
-        const playerRef = collection(db, 'tournaments', tournamentId, 'players');
+        const playerRef = collection(db, col('tournaments'), tournamentId, 'players');
         const docRef = await addDoc(playerRef, {
             ...player,
             registrationStatus: player.registrationStatus || 'approved',
@@ -692,7 +709,7 @@ export const addPlayerToTournament = async (tournamentId: string, player: Partia
 
 export const removePlayerFromTournament = async (tournamentId: string, playerId: string) => {
     try {
-        await deleteDoc(doc(db, 'tournaments', tournamentId, 'players', playerId));
+        await deleteDoc(doc(db, col('tournaments'), tournamentId, 'players', playerId));
     } catch (error) {
         console.error(error);
         throw error;
@@ -701,7 +718,7 @@ export const removePlayerFromTournament = async (tournamentId: string, playerId:
 
 export const updatePlayerInTournament = async (tournamentId: string, playerId: string, data: Partial<TournamentPlayer>) => {
     try {
-        await updateDoc(doc(db, 'tournaments', tournamentId, 'players', playerId), data);
+        await updateDoc(doc(db, col('tournaments'), tournamentId, 'players', playerId), data);
     } catch (error) {
         console.error(error);
         throw error;
@@ -712,7 +729,7 @@ export const deleteManualPlayers = async (tournamentId: string, modality: 'singl
     try {
         const isDoubles = modality === 'doubles';
         const collectionName = isDoubles ? 'doublesTeams' : 'players';
-        const itemsRef = collection(db, 'tournaments', tournamentId, collectionName);
+        const itemsRef = collection(db, col('tournaments'), tournamentId, collectionName);
         let q = query(itemsRef);
         if (category && category !== 'all' as any) {
             q = query(q, where('category', '==', category));
@@ -732,17 +749,17 @@ export const deleteManualPlayers = async (tournamentId: string, modality: 'singl
 
             if (isDoubles) {
                 if (data.player1Uid) {
-                    const u1Snap = await getDoc(doc(db, 'users', data.player1Uid));
+                    const u1Snap = await getDoc(doc(db, col('users'), data.player1Uid));
                     if (u1Snap.exists() && u1Snap.data()?.isManual) u1Manual = true;
                 }
                 if (data.player2Uid) {
-                    const u2Snap = await getDoc(doc(db, 'users', data.player2Uid));
+                    const u2Snap = await getDoc(doc(db, col('users'), data.player2Uid));
                     if (u2Snap.exists() && u2Snap.data()?.isManual) u2Manual = true;
                 }
                 // A doubles team is manual if it's flagged or BOTH players are manual
                 if (u1Manual && u2Manual) isManual = true;
             } else if (data.uid) {
-                const uSnap = await getDoc(doc(db, 'users', data.uid));
+                const uSnap = await getDoc(doc(db, col('users'), data.uid));
                 if (uSnap.exists() && uSnap.data()?.isManual) {
                     isManual = true;
                     u1Manual = true;
@@ -752,7 +769,7 @@ export const deleteManualPlayers = async (tournamentId: string, modality: 'singl
             if (!isManual) continue;
 
             // Cleanup matches (Restricted to same category)
-            const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
+            const matchesRef = collection(db, col('tournaments'), tournamentId, 'matches');
             const matchQueries = [];
             if (isDoubles) {
                 let q1 = query(matchesRef, where('team1Id', '==', itemDoc.id));
@@ -779,10 +796,10 @@ export const deleteManualPlayers = async (tournamentId: string, modality: 'singl
 
             // Cleanup shadow users
             if (u1Manual && (!isDoubles ? data.uid : data.player1Uid)) {
-                await deleteDoc(doc(db, 'users', !isDoubles ? data.uid : data.player1Uid));
+                await deleteDoc(doc(db, col('users'), !isDoubles ? data.uid : data.player1Uid));
             }
             if (u2Manual && data.player2Uid) {
-                await deleteDoc(doc(db, 'users', data.player2Uid));
+                await deleteDoc(doc(db, col('users'), data.player2Uid));
             }
 
             await deleteDoc(itemDoc.ref);
@@ -800,7 +817,7 @@ export const checkInPlayer = async (tournamentId: string, playerId: string, play
         const batch = writeBatch(db);
 
         // 1. Update the specific document by ID (ensures it works for guests/manual players)
-        const playerRef = doc(db, "tournaments", tournamentId, "players", playerId);
+        const playerRef = doc(db, col('tournaments'), tournamentId, "players", playerId);
         batch.update(playerRef, {
             isCheckedIn: value,
             checkInTime: value ? Timestamp.now() : deleteField()
@@ -809,7 +826,7 @@ export const checkInPlayer = async (tournamentId: string, playerId: string, play
         // 2. If a UID is provided, update all other documents with the same UID correctly
         if (playerUid && playerUid !== 'guest') {
             const q = query(
-                collection(db, "tournaments", tournamentId, "players"),
+                collection(db, col('tournaments'), tournamentId, "players"),
                 where("uid", "==", playerUid)
             );
             const snapshot = await getDocs(q);
@@ -827,6 +844,45 @@ export const checkInPlayer = async (tournamentId: string, playerId: string, play
         return true;
     } catch (error) {
         console.error("Error checking in player:", error);
+        throw error;
+    }
+};
+
+export const clearAllSeeds = async (
+    tournamentId: string,
+    modality: 'singles' | 'doubles' = 'singles',
+    category?: TournamentCategory | string
+) => {
+    try {
+        const batch = writeBatch(db);
+        if (modality === 'doubles') {
+            const { getDoublesTeams } = await import('./doublesTeamService');
+            let teams = await getDoublesTeams(tournamentId);
+            if (category && category !== 'all') {
+                teams = teams.filter(t => t.category?.toLowerCase() === category.toLowerCase());
+            }
+            teams.forEach(team => {
+                if (team.seed !== undefined && team.seed !== null) {
+                    const teamRef = doc(db, col('tournaments'), tournamentId, "doublesTeams", team.id);
+                    batch.update(teamRef, { seed: null, seedType: null });
+                }
+            });
+        } else {
+            let players = await getTournamentPlayers(tournamentId);
+            if (category && category !== 'all') {
+                players = players.filter(p => p.category?.toLowerCase() === (category as string).toLowerCase());
+            }
+            players.forEach(p => {
+                if (p.seed !== undefined && p.seed !== null) {
+                    const playerRef = doc(db, col('tournaments'), tournamentId, "players", p.id);
+                    batch.update(playerRef, { seed: null, seedType: null });
+                }
+            });
+        }
+        await batch.commit();
+        return true;
+    } catch (error) {
+        console.error("Error clearing seeds:", error);
         throw error;
     }
 };
@@ -853,7 +909,7 @@ export const getPlayerMatches = async (uid: string) => {
             const tournamentNames: { [id: string]: string } = {};
             const tournamentPromises = Array.from(tournamentIds).map(async (tid) => {
                 try {
-                    const tournamentDoc = await getDoc(doc(db, 'tournaments', tid));
+                    const tournamentDoc = await getDoc(doc(db, col('tournaments'), tid));
                     if (tournamentDoc.exists()) {
                         tournamentNames[tid] = tournamentDoc.data()?.name || 'Tournament';
                     }

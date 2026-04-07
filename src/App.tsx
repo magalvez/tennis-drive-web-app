@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { DevBanner } from './components/DevBanner';
 import AdminLayout from './components/admin/AdminLayout';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
@@ -122,6 +123,7 @@ function App() {
 
             <Route path="/" element={<Navigate to="/admin" replace />} />
           </Routes>
+          <DevBanner />
         </BrowserRouter>
       </LanguageProvider>
     </AuthProvider>

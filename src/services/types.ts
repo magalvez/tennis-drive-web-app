@@ -76,6 +76,7 @@ export interface TournamentPlayer {
     isWildcard?: boolean;
     group?: string;
     seed?: number;
+    seedType?: 'manual' | 'automatic';
     isManual?: boolean;
     category?: TournamentCategory;
     playerProfileCategory?: TournamentCategory;
@@ -130,6 +131,9 @@ export interface GroupStanding {
     points: number;
     wins: number;
     losses: number;
+    gamesWon: number;
+    gamesLost: number;
+    gamesFinal: number;
     played: number;
     group: string;
     isQualifier: boolean;

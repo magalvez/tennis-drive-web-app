@@ -13,6 +13,8 @@ import {
 import { getAllClubs, type ClubData } from '../../services/managerService';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { col } from '../../config/environment';
+
 
 const ManagerChatPage = () => {
     const { user } = useAuth();
@@ -30,7 +32,7 @@ const ManagerChatPage = () => {
     useEffect(() => {
         if (!user) return;
         const q = query(
-            collection(db, "manager_chats"),
+            collection(db, col('manager_chats')),
             where("managerId", "==", user.uid),
             where("status", "==", activeTab),
             orderBy("lastMessageAt", "desc")

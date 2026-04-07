@@ -11,15 +11,17 @@
         "next": "Siguiente",
         "finish": "Finalizar",
         "loading": "Cargando...",
+        "continue": "Continuar",
         "update": "Actualizar",
         "complete": "Completar",
         "error": "Ocurrió un error",
         "success": "Éxito",
         "optional": "(Opcional)",
+        "all": "Todos",
+        "attention": "Atención",
         "allCategories": "Todas las Categorías",
         "paid": "PAGADO",
         "unpaid": "PENDIENTE",
-        "all": "Todos",
         "name": "Nombre",
         "wildcard": "Invitado (Wildcard)",
         "test": "Prueba",
@@ -36,7 +38,6 @@
         "confirmResult": "Confirmar Resultado",
         "none": "Ninguna",
         "player": "Jugador",
-        "attention": "Atención",
         "checkIn": "Check-In",
         "manage": "Gestionar",
         "payment": "Pago"
@@ -563,6 +564,30 @@
                 "status": "Estado",
                 "save": "Guardar Cambios"
             },
+            "tools": {
+                "title": "Gestión / Herramientas",
+                "quickActions": "Acciones Rápidas",
+                "simulate": "Simular",
+                "groupResults": "Resultados Grupos",
+                "groupManagement": "Gestión de Grupos",
+                "addToGroup": "Agregar a Grupo",
+                "removeFromGroup": "Eliminar",
+                "updateScoring": "Actualizar Puntuación",
+                "dangerZone": "Zona de Peligro",
+                "resetGroups": "Resetear Grupos",
+                "resetMainDraw": "Resetear Cuadro",
+                "autoSeed": "Auto-Siembra",
+                "basedOnRankings": "Basado en Rankings",
+                "refreshData": "Refrescar Datos",
+                "testPlayers": "Jugadores Test",
+                "generateRandom": "Generar Aleatorios",
+                "wipeTestData": "Borrar Datos Prueba",
+                "manualPlayersOnly": "Solo Jugadores Manuales",
+                "clearSeeds": "Borrar Siembras",
+                "clearSeedsConfirm": "¿Estás seguro de que deseas borrar todas las siembras para %{category}?",
+                "clearSeedsSuccess": "Siembras borradas con éxito",
+                "clearSeedsError": "Error al borrar siembras"
+            },
             "modality": {
                 "singles": "Sencillos",
                 "doubles": "Equipos de Dobles",
@@ -721,9 +746,12 @@
                 "successRemove": "Quitado del torneo con éxito",
                 "successRecord": "Pago registrado con éxito",
                 "successGenerate": "Jugadores generados con éxito",
+                "unseededWarning": "Hay %{count} jugadores/equipos actualmente sin siembra. Las siembras restantes se asignarán automáticamente. ¿Deseas continuar?",
+                "assignSeedsBtn": "Asignar Siembras",
                 "successAutoSeed": "Auto-siembra completada",
                 "status": {
                     "manual": "Manual",
+                    "automatic": "Automático",
                     "suspended": "Suspendido"
                 },
                 "profile": {
@@ -766,7 +794,15 @@
         "groupsNotFinalized": "Finaliza todos los grupos primero.",
         "winner": "Ganador",
         "pending": "TBD",
-        "matchNumber": "Partido"
+        "matchNumber": "Partido",
+        "seeding": {
+            "title": "Seleccionar Estrategia de Siembra",
+            "message": "¿Cómo deseas asignar las siembras para el cuadro?",
+            "standard": "Estándar (Ranking y Siembras)",
+            "standardDesc": "Usa el ranking de jugadores y siembras asignadas manualmente.",
+            "best_of_groups": "Mejores de Grupo (Rendimiento)",
+            "best_of_groupsDesc": "Siembra a los jugadores según puntos en grupo y diferencia de juegos."
+        }
     },
     "matches": {
         "friendlyChallenge": "Desafío Amistoso",
@@ -859,7 +895,7 @@
             "triggerError": "Error al facturar",
             "loading": "Cargando..."
         },
-        "tournaments": {
+        "globalTournaments": {
             "title": "Torneos Globales",
             "subtitle": "Moderación y eliminación de eventos ofensivos o inválidos.",
             "noTournaments": "No se encontraron torneos.",

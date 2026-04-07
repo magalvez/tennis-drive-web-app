@@ -1,5 +1,6 @@
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "../config/firebase";
+import { storagePath } from '../config/environment';
 
 /**
  * Uploads an image to Firebase Storage and returns the download URL.
@@ -10,7 +11,7 @@ import { storage } from "../config/firebase";
 export const uploadImage = async (file: File, path: string): Promise<string> => {
     try {
         // 1. Create a reference
-        const storageRef = ref(storage, path);
+        const storageRef = ref(storage, storagePath(path));
 
         // 2. Upload
         const snapshot = await uploadBytes(storageRef, file);

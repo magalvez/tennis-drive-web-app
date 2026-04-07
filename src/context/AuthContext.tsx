@@ -2,6 +2,8 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 interface AuthContextType {
     user: User | null;
@@ -38,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setIsLoading(true);
                 setUser(currentUser);
 
-                const userRef = doc(db, 'users', currentUser.uid);
+                const userRef = doc(db, col('users'), currentUser.uid);
                 unsubscribeUserDoc = onSnapshot(userRef, (snapshot) => {
                     if (snapshot.exists()) {
                         const data = snapshot.data();

@@ -20,6 +20,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getTournamentById } from './tournamentService';
+import { col } from '../config/environment';
+
 
 // ============================================================================
 // INTERFACES
@@ -55,7 +57,7 @@ export const createDoublesRequest = async (
 ): Promise<string> => {
     try {
         const docRef = await addDoc(
-            collection(db, 'tournaments', request.tournamentId, 'doublesRequests'),
+            collection(db, col('tournaments'), request.tournamentId, 'doublesRequests'),
             {
                 ...request,
                 status: 'pending',
@@ -104,7 +106,7 @@ export const getPendingRequestsForTournament = async (
 ): Promise<DoublesRequest[]> => {
     try {
         const q = query(
-            collection(db, 'tournaments', tournamentId, 'doublesRequests'),
+            collection(db, col('tournaments'), tournamentId, 'doublesRequests'),
             where('status', '==', 'pending'),
             orderBy('createdAt', 'desc')
         );
@@ -128,7 +130,7 @@ export const acceptDoublesRequest = async (
     requestId: string
 ): Promise<string> => {
     try {
-        const requestRef = doc(db, 'tournaments', tournamentId, 'doublesRequests', requestId);
+        const requestRef = doc(db, col('tournaments'), tournamentId, 'doublesRequests', requestId);
         const requestSnap = await getDoc(requestRef);
 
         if (!requestSnap.exists()) {
@@ -153,7 +155,7 @@ export const acceptDoublesRequest = async (
         const participantIds = [request.fromUserId, request.toUserId];
 
         const otherRequestsQuery = query(
-            collection(db, 'tournaments', tournamentId, 'doublesRequests'),
+            collection(db, col('tournaments'), tournamentId, 'doublesRequests'),
             where('status', '==', 'pending')
         );
         const otherRequestsSnap = await getDocs(otherRequestsQuery);
@@ -166,7 +168,7 @@ export const acceptDoublesRequest = async (
         });
 
         const waitingRoomQuery = query(
-            collection(db, 'tournaments', tournamentId, 'doublesTeams'),
+            collection(db, col('tournaments'), tournamentId, 'doublesTeams'),
             where('inWaitingRoom', '==', true),
             where('status', '==', 'pending_partner')
         );
@@ -177,7 +179,7 @@ export const acceptDoublesRequest = async (
 
         const batch = writeBatch(db);
 
-        const newTeamRef = doc(collection(db, 'tournaments', tournamentId, 'doublesTeams'));
+        const newTeamRef = doc(collection(db, col('tournaments'), tournamentId, 'doublesTeams'));
         const teamData = {
             player1Uid: request.fromUserId,
             player1Name: request.fromUserName,
@@ -262,7 +264,7 @@ export const rejectDoublesRequest = async (
     requestId: string
 ): Promise<void> => {
     try {
-        const requestRef = doc(db, 'tournaments', tournamentId, 'doublesRequests', requestId);
+        const requestRef = doc(db, col('tournaments'), tournamentId, 'doublesRequests', requestId);
         await updateDoc(requestRef, {
             status: 'rejected',
             respondedAt: serverTimestamp()

@@ -1,11 +1,13 @@
 import { collection, doc, getDocs, onSnapshot, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { TournamentPlayer } from './types';
+import { col } from '../config/environment';
+
 
 export const getPendingRegistrations = async (tournamentId: string): Promise<TournamentPlayer[]> => {
     try {
         const q = query(
-            collection(db, 'tournaments', tournamentId, 'players'),
+            collection(db, col('tournaments'), tournamentId, 'players'),
             where('registrationStatus', '==', 'pending'),
             orderBy('addedAt', 'desc')
         );
@@ -22,7 +24,7 @@ export const subscribeToTournamentPendingRegistrations = (
     callback: (players: TournamentPlayer[]) => void
 ) => {
     const q = query(
-        collection(db, 'tournaments', tournamentId, 'players'),
+        collection(db, col('tournaments'), tournamentId, 'players'),
         where('registrationStatus', '==', 'pending'),
         orderBy('addedAt', 'desc')
     );
@@ -37,7 +39,7 @@ export const subscribeToTournamentPendingRegistrations = (
 export const getClubPendingRegistrations = async (clubId: string): Promise<{ tournamentId: string; tournamentName: string; player: TournamentPlayer }[]> => {
     try {
         const tournamentsQuery = query(
-            collection(db, 'tournaments'),
+            collection(db, col('tournaments')),
             where('clubId', '==', clubId),
             where('status', 'in', ['upcoming', 'active'])
         );
@@ -62,7 +64,7 @@ export const getClubPendingRegistrations = async (clubId: string): Promise<{ tou
 
 export const approveRegistration = async (tournamentId: string, playerId: string, reviewerUid: string): Promise<void> => {
     try {
-        const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
+        const playerRef = doc(db, col('tournaments'), tournamentId, 'players', playerId);
         await updateDoc(playerRef, {
             registrationStatus: 'approved',
             reviewedAt: Timestamp.now(),
@@ -76,7 +78,7 @@ export const approveRegistration = async (tournamentId: string, playerId: string
 
 export const rejectRegistration = async (tournamentId: string, playerId: string, reviewerUid: string, reason: string): Promise<void> => {
     try {
-        const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
+        const playerRef = doc(db, col('tournaments'), tournamentId, 'players', playerId);
         await updateDoc(playerRef, {
             registrationStatus: 'rejected',
             rejectionReason: reason,
@@ -94,7 +96,7 @@ export const subscribeToClubPendingRegistrations = (
     callback: (results: { tournamentId: string; tournamentName: string; player: TournamentPlayer }[]) => void
 ) => {
     const tournamentsQuery = query(
-        collection(db, 'tournaments'),
+        collection(db, col('tournaments')),
         where('clubId', '==', clubId),
         where('status', 'in', ['upcoming', 'active'])
     );
@@ -150,7 +152,7 @@ export const subscribeToClubPendingRegistrations = (
 
             if (!playerUnsubscribes[tId]) {
                 const playersQuery = query(
-                    collection(db, 'tournaments', tId, 'players'),
+                    collection(db, col('tournaments'), tId, 'players'),
                     where('registrationStatus', '==', 'pending'),
                     orderBy('addedAt', 'desc')
                 );
@@ -165,7 +167,7 @@ export const subscribeToClubPendingRegistrations = (
 
             if (!doublesUnsubscribes[tId]) {
                 const doublesQuery = query(
-                    collection(db, 'tournaments', tId, 'doublesTeams'),
+                    collection(db, col('tournaments'), tId, 'doublesTeams'),
                     where('status', '==', 'pending_payment')
                 );
 

@@ -12,6 +12,10 @@ import {
 import { db } from '../config/firebase';
 import { getTournamentById } from './tournamentService';
 import type { Match, TournamentCategory } from './types';
+import { col } from '../config/environment';
+
+export type SeedingLogic = 'standard' | 'best_of_groups';
+
 
 export type BracketRound = 'round_of_128' | 'round_of_64' | 'round_of_32' | 'round_of_16' | 'quarter_finals' | 'semi_finals' | 'final';
 
@@ -58,7 +62,13 @@ const getSeededPositions = (count: number): number[] => {
     return positions;
 };
 
-export const generateMainDraw = async (tournamentId: string, items: any[], category?: TournamentCategory, modality: 'singles' | 'doubles' = 'singles') => {
+export const generateMainDraw = async (
+    tournamentId: string,
+    items: any[],
+    category?: TournamentCategory,
+    modality: 'singles' | 'doubles' = 'singles',
+    seedingLogic: SeedingLogic = 'standard'
+) => {
     try {
         const isDoubles = modality === 'doubles';
         const tournament = await getTournamentById(tournamentId);
@@ -66,10 +76,32 @@ export const generateMainDraw = async (tournamentId: string, items: any[], categ
 
         const bracketSize = calculateBracketSize(items.length);
         const rounds = Math.log2(bracketSize);
-        const matchesCollection = collection(db, 'tournaments', tournamentId, 'matches');
+        const matchesCollection = collection(db, col('tournaments'), tournamentId, 'matches');
 
-        // 1. Sort items by seed (if available) or rankValue
-        const sortedItems = [...items].sort((a, b) => (a.seed || 999) - (b.seed || 999));
+        // 1. Sort items by seed (if available) or group performance
+        let sortedItems = [...items];
+        if (seedingLogic === 'best_of_groups') {
+            sortedItems.sort((a, b) => {
+                const winsA = a.wins || 0;
+                const winsB = b.wins || 0;
+                const gfA = a.gamesFinal || 0;
+                const gfB = b.gamesFinal || 0;
+
+                if (winsB !== winsA) return winsB - winsA;
+                if (gfB !== gfA) return gfB - gfA;
+
+                return Math.random() - 0.5;
+            });
+            console.log('--- BEST OF GROUPS SEEDING INPUT (WEB) ---');
+            console.log('SEEDED ITEMS:', JSON.stringify(sortedItems.map((p, index) => ({
+                name: modality === 'doubles' ? p.teamName : p.name,
+                seed: index + 1,
+                wins: p.wins || 0,
+                games_final: p.gamesFinal || 0
+            })), null, 2));
+        } else {
+            sortedItems.sort((a, b) => (a.seed || 999) - (b.seed || 999));
+        }
 
         // 2. Map seeds to items
         const seedToItem: { [seed: number]: any } = {};
@@ -164,7 +196,7 @@ export const generateMainDraw = async (tournamentId: string, items: any[], categ
                     const nextId = nextMatch.id;
                     const slot = p % 2 === 1 ? 1 : 2;
 
-                    const nextMatchRef = doc(db, 'tournaments', tournamentId, 'matches', nextId);
+                    const nextMatchRef = doc(db, col('tournaments'), tournamentId, 'matches', nextId);
                     const updateData: any = {};
                     const winnerName = isDoubles
                         ? (item1 ? item1.teamName : item2.teamName)
@@ -201,8 +233,8 @@ export const deleteBracketMatches = async (tournamentId: string, category?: Tour
     try {
         const isDoubles = modality === 'doubles';
         const q = category
-            ? query(collection(db, 'tournaments', tournamentId, 'matches'), where('category', '==', category))
-            : query(collection(db, 'tournaments', tournamentId, 'matches'));
+            ? query(collection(db, col('tournaments'), tournamentId, 'matches'), where('category', '==', category))
+            : query(collection(db, col('tournaments'), tournamentId, 'matches'));
 
         const snapshot = await getDocs(q);
         const bracketMatches = snapshot.docs.filter(d => {
@@ -222,7 +254,7 @@ export const advanceWinner = async (
     winnerId: string
 ): Promise<void> => {
     try {
-        const matchRef = doc(db, 'tournaments', tournamentId, 'matches', currentMatchId);
+        const matchRef = doc(db, col('tournaments'), tournamentId, 'matches', currentMatchId);
         const matchSnap = await getDoc(matchRef);
 
         if (!matchSnap.exists()) return;
@@ -230,7 +262,7 @@ export const advanceWinner = async (
 
         if (!match.nextMatchId) return;
 
-        const nextMatchRef = doc(db, 'tournaments', tournamentId, 'matches', match.nextMatchId);
+        const nextMatchRef = doc(db, col('tournaments'), tournamentId, 'matches', match.nextMatchId);
         const nextMatchSnap = await getDoc(nextMatchRef);
 
         if (!nextMatchSnap.exists()) return;

@@ -1,5 +1,7 @@
 import { addDoc, collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where, deleteField, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 export interface ScoringConfig {
     win: number;
@@ -42,10 +44,10 @@ export const createClub = async (data: Omit<ClubData, 'createdAt'>) => {
             }
         });
 
-        const docRef = await addDoc(collection(db, "clubs"), clubData);
+        const docRef = await addDoc(collection(db, col('clubs')), clubData);
 
         // Set managedClubId on the user
-        const userRef = doc(db, "users", data.adminUid);
+        const userRef = doc(db, col('users'), data.adminUid);
         await updateDoc(userRef, {
             managedClubId: docRef.id
         });
@@ -59,7 +61,7 @@ export const createClub = async (data: Omit<ClubData, 'createdAt'>) => {
 
 export const getClubByAdmin = async (adminUid: string) => {
     try {
-        const q = query(collection(db, "clubs"), where("adminUid", "==", adminUid));
+        const q = query(collection(db, col('clubs')), where("adminUid", "==", adminUid));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
             const docData = snapshot.docs[0];
@@ -75,7 +77,7 @@ export const getClubByAdmin = async (adminUid: string) => {
 
 export const getClubById = async (id: string) => {
     try {
-        const docRef = doc(db, "clubs", id);
+        const docRef = doc(db, col('clubs'), id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             const club = { id: docSnap.id, ...docSnap.data() } as ClubData & { id: string };
@@ -90,7 +92,7 @@ export const getClubById = async (id: string) => {
 
 export const updateClub = async (id: string, data: Partial<ClubData>) => {
     try {
-        const docRef = doc(db, "clubs", id);
+        const docRef = doc(db, col('clubs'), id);
         await updateDoc(docRef, data);
     } catch (error) {
         console.error("Error updating club:", error);
@@ -100,7 +102,7 @@ export const updateClub = async (id: string, data: Partial<ClubData>) => {
 
 export const deleteClubEpaycoConfig = async (id: string) => {
     try {
-        const docRef = doc(db, "clubs", id);
+        const docRef = doc(db, col('clubs'), id);
         await updateDoc(docRef, { epaycoConfig: deleteField() });
     } catch (error) {
         console.error("Error deleting epayco config:", error);
@@ -110,7 +112,7 @@ export const deleteClubEpaycoConfig = async (id: string) => {
 
 export const getAllClubs = async () => {
     try {
-        const snapshot = await getDocs(collection(db, "clubs"));
+        const snapshot = await getDocs(collection(db, col('clubs')));
         const clubs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClubData & { id: string }));
         return clubs;
     } catch (error) {
@@ -124,7 +126,7 @@ export const getAllClubs = async () => {
  */
 export const logManagerAction = async (action: string, details: string, metadata: any = {}) => {
     try {
-        await addDoc(collection(db, "audit_logs"), {
+        await addDoc(collection(db, col('audit_logs')), {
             action,
             details,
             metadata,
@@ -141,7 +143,7 @@ export const logManagerAction = async (action: string, details: string, metadata
  */
 export const toggleClubStatus = async (clubId: string, status: 'active' | 'inactive', managerId: string) => {
     try {
-        const docRef = doc(db, "clubs", clubId);
+        const docRef = doc(db, col('clubs'), clubId);
         await updateDoc(docRef, { status });
         
         await logManagerAction(
@@ -160,7 +162,7 @@ export const toggleClubStatus = async (clubId: string, status: 'active' | 'inact
  */
 export const updateClubSubscription = async (clubId: string, data: any, managerId: string) => {
     try {
-        const docRef = doc(db, "clubs", clubId);
+        const docRef = doc(db, col('clubs'), clubId);
         const updates: any = {};
         
         if (data.subscriptionPlan) updates.subscriptionPlan = data.subscriptionPlan;
@@ -193,7 +195,7 @@ export const updateClubSubscription = async (clubId: string, data: any, managerI
  */
 export const calculateTournamentFees = async (tournamentId: string, managerId: string = 'system') => {
     try {
-        const tournamentResponse = await getDoc(doc(db, "tournaments", tournamentId));
+        const tournamentResponse = await getDoc(doc(db, col('tournaments'), tournamentId));
         if (!tournamentResponse.exists()) return null;
         const tournament = tournamentResponse.data();
         const clubId = tournament.clubId;
@@ -203,8 +205,8 @@ export const calculateTournamentFees = async (tournamentId: string, managerId: s
         if (!club || club.subscriptionPlan !== 'pay_per_tournament') return null;
 
         // Fetch players and teams
-        const playersSnap = await getDocs(collection(db, "tournaments", tournamentId, "players"));
-        const teamsSnap = await getDocs(collection(db, "tournaments", tournamentId, "doublesTeams"));
+        const playersSnap = await getDocs(collection(db, col('tournaments'), tournamentId, "players"));
+        const teamsSnap = await getDocs(collection(db, col('tournaments'), tournamentId, "doublesTeams"));
 
         const singlesCount = playersSnap.size;
         const doublesCount = teamsSnap.size;
@@ -227,7 +229,7 @@ export const calculateTournamentFees = async (tournamentId: string, managerId: s
             triggeredBy: managerId
         };
 
-        const docRef = await addDoc(collection(db, "club_billings"), billingRecord);
+        const docRef = await addDoc(collection(db, col('club_billings')), billingRecord);
 
         await logManagerAction(
             'calculate_tournament_fees',
@@ -268,7 +270,7 @@ export const calculateMonthlyFees = async (managerId: string = 'system') => {
                 type: 'monthly'
             };
 
-            const docRef = await addDoc(collection(db, "club_billings"), billingRecord);
+            const docRef = await addDoc(collection(db, col('club_billings')), billingRecord);
             
             await logManagerAction(
                 'calculate_monthly_fee',
@@ -310,7 +312,7 @@ export const triggerManualMonthlyBilling = async (clubId: string, managerId: str
             type: 'monthly_manual'
         };
 
-        const docRef = await addDoc(collection(db, "club_billings"), billingRecord);
+        const docRef = await addDoc(collection(db, col('club_billings')), billingRecord);
         
         await logManagerAction(
             'trigger_manual_billing',
@@ -329,7 +331,7 @@ export const triggerManualMonthlyBilling = async (clubId: string, managerId: str
  */
 export const toggleTournamentBlock = async (tournamentId: string, isBlocked: boolean, managerId: string) => {
     try {
-        const docRef = doc(db, "tournaments", tournamentId);
+        const docRef = doc(db, col('tournaments'), tournamentId);
         await updateDoc(docRef, { isBlocked });
         
         await logManagerAction(
@@ -348,7 +350,7 @@ export const toggleTournamentBlock = async (tournamentId: string, isBlocked: boo
  */
 export const removeTournament = async (tournamentId: string, managerId: string) => {
     try {
-        const docRef = doc(db, "tournaments", tournamentId);
+        const docRef = doc(db, col('tournaments'), tournamentId);
         await updateDoc(docRef, { 
             status: 'removed',
             removedAt: Timestamp.now(),
@@ -371,7 +373,7 @@ export const removeTournament = async (tournamentId: string, managerId: string) 
  */
 export const getRevenueAnalytics = async () => {
     try {
-        const billingSnap = await getDocs(collection(db, "club_billings"));
+        const billingSnap = await getDocs(collection(db, col('club_billings')));
         const billings = billingSnap.docs.map(doc => doc.data());
 
         const totalRevenue = billings.reduce((sum, b) => sum + (b.totalFee || 0), 0);
@@ -402,7 +404,7 @@ export const getRevenueAnalytics = async () => {
 
 export const getAllBillings = async () => {
     try {
-        const q = query(collection(db, "club_billings"), orderBy("calculatedAt", "desc"));
+        const q = query(collection(db, col('club_billings')), orderBy("calculatedAt", "desc"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
     } catch (error) {
@@ -413,7 +415,7 @@ export const getAllBillings = async () => {
 
 export const updateBillingStatus = async (billingId: string, status: 'paid' | 'pending', managerId: string) => {
     try {
-        const docRef = doc(db, "club_billings", billingId);
+        const docRef = doc(db, col('club_billings'), billingId);
         await updateDoc(docRef, { 
             status,
             updatedAt: Timestamp.now(),

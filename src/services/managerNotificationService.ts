@@ -1,6 +1,8 @@
 import { addDoc, collection, Timestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { logManagerAction } from './managerService';
+import { col } from '../config/environment';
+
 
 export interface ManagerNotification {
     id?: string;
@@ -29,7 +31,7 @@ export const sendIndividualNotification = async (targetUserId: string, title: st
             readBy: []
         };
 
-        const docRef = await addDoc(collection(db, "manager_notifications"), notification);
+        const docRef = await addDoc(collection(db, col('manager_notifications')), notification);
 
         await logManagerAction(
             'send_individual_notification',
@@ -58,7 +60,7 @@ export const sendBroadcastNotification = async (title: string, body: string, man
             readBy: []
         };
 
-        const docRef = await addDoc(collection(db, "manager_notifications"), notification);
+        const docRef = await addDoc(collection(db, col('manager_notifications')), notification);
         
         await logManagerAction(
             'send_broadcast_notification',
@@ -88,7 +90,7 @@ export const sendTargetedNotification = async (clubId: string, title: string, bo
             readBy: []
         };
 
-        const docRef = await addDoc(collection(db, "manager_notifications"), notification);
+        const docRef = await addDoc(collection(db, col('manager_notifications')), notification);
 
         await logManagerAction(
             'send_targeted_notification',
@@ -110,13 +112,13 @@ export const getAdminNotifications = async (clubId: string) => {
     try {
         // Get both broadcast and targeted ones
         const broadcastQ = query(
-            collection(db, "manager_notifications"),
+            collection(db, col('manager_notifications')),
             where("type", "==", "broadcast"),
             orderBy("createdAt", "desc")
         );
         
         const targetedQ = query(
-            collection(db, "manager_notifications"),
+            collection(db, col('manager_notifications')),
             where("targetClubId", "==", clubId),
             orderBy("createdAt", "desc")
         );

@@ -11,9 +11,12 @@
         "next": "Next",
         "finish": "Finish",
         "loading": "Loading...",
+        "continue": "Continue",
         "error": "An error occurred",
         "success": "Success",
         "optional": "(Optional)",
+        "all": "All",
+        "attention": "Attention",
         "allCategories": "All Categories",
         "paid": "Paid",
         "unpaid": "Unpaid",
@@ -548,7 +551,11 @@
                 "testPlayers": "Test Players",
                 "generateRandom": "Generate Random",
                 "wipeTestData": "Wipe Test Data",
-                "manualPlayersOnly": "Manual Players Only"
+                "manualPlayersOnly": "Manual Players Only",
+                "clearSeeds": "Clear Seeds",
+                "clearSeedsConfirm": "Are you sure you want to clear all seeds for %{category}?",
+                "clearSeedsSuccess": "Seeds cleared successfully",
+                "clearSeedsError": "Error clearing seeds"
             },
             "date": "Date",
             "selectDate": "Select Date",
@@ -639,6 +646,8 @@
                 "alreadyIn": "Already in Category",
                 "alreadyInTournament": "This player is already registered in this category",
                 "successAdd": "Player added successfully",
+      "unseededWarning": "There are %{count} players/teams currently without a seed. The remaining seeds will be assigned automatically. Do you want to continue?",
+      "assignSeedsBtn": "Assign Seeds",
                 "subtitle": "Manage all registered players and their club points.",
                 "management": {
                     "recalculateAction": "Recalculate XP",
@@ -647,6 +656,7 @@
                 },
                 "status": {
                     "manual": "Manual",
+                    "automatic": "Automatic",
                     "suspended": "Suspended"
                 },
                 "profile": {
@@ -771,7 +781,15 @@
         "groupsNotFinalized": "All groups must be finalized before generating the Main Draw.",
         "winner": "Winner",
         "pending": "TBD",
-        "matchNumber": "Match"
+        "matchNumber": "Match",
+        "seeding": {
+            "title": "Select Seeding Strategy",
+            "message": "How do you want to assign seeds for the bracket?",
+            "standard": "Standard (Ranking & Seeds)",
+            "standardDesc": "Uses player ranking and manually assigned seeds.",
+            "best_of_groups": "Best of Groups (Performance)",
+            "best_of_groupsDesc": "Seeds players based on group points and game differential."
+        }
     },
     "matches": {
         "friendlyChallenge": "Friendly Challenge",
@@ -863,7 +881,7 @@
             "triggerError": "Failed to trigger billing",
             "loading": "Loading..."
         },
-        "tournaments": {
+        "globalTournaments": {
             "title": "Global Tournaments",
             "subtitle": "Moderation and removal of offensive or invalid events.",
             "noTournaments": "No tournaments found.",

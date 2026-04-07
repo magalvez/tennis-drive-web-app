@@ -2,8 +2,10 @@ import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimesta
 import { db } from '../config/firebase';
 import { logActivity } from './activityService';
 import type { Transaction } from './types';
+import { col } from '../config/environment';
 
-const TRANSACTIONS_COLLECTION = 'transactions';
+
+const TRANSACTIONS_COLLECTION = col('transactions');
 
 export interface TransactionInput {
     userId: string;
@@ -87,7 +89,7 @@ export const completeTransaction = async (transactionId: string, gatewayRef?: st
 export const markTournamentPlayerPaid = async (tournamentId: string, userId: string, playerId?: string, doublesTeamId?: string) => {
     try {
         if (doublesTeamId) {
-            const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', doublesTeamId);
+            const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', doublesTeamId);
             await updateDoc(teamRef, {
                 paymentStatus: 'paid',
                 paidAt: serverTimestamp(),
@@ -97,7 +99,7 @@ export const markTournamentPlayerPaid = async (tournamentId: string, userId: str
         }
 
         if (playerId) {
-            const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
+            const playerRef = doc(db, col('tournaments'), tournamentId, 'players', playerId);
             await updateDoc(playerRef, {
                 paymentStatus: 'paid',
                 paidAt: serverTimestamp(),
@@ -107,7 +109,7 @@ export const markTournamentPlayerPaid = async (tournamentId: string, userId: str
         }
 
         // Fallback for UID-based matching
-        const playersRef = collection(db, 'tournaments', tournamentId, 'players');
+        const playersRef = collection(db, col('tournaments'), tournamentId, 'players');
         const q = query(playersRef, where('uid', '==', userId));
         const snapshot = await getDocs(q);
 
@@ -127,7 +129,7 @@ export const markTournamentPlayerPaid = async (tournamentId: string, userId: str
 export const markTournamentPlayerUnpaid = async (tournamentId: string, userId: string, playerId?: string) => {
     try {
         if (playerId) {
-            const playerRef = doc(db, 'tournaments', tournamentId, 'players', playerId);
+            const playerRef = doc(db, col('tournaments'), tournamentId, 'players', playerId);
             await updateDoc(playerRef, {
                 paymentStatus: 'unpaid',
                 paidAt: null
@@ -135,7 +137,7 @@ export const markTournamentPlayerUnpaid = async (tournamentId: string, userId: s
             return;
         }
 
-        const playersRef = collection(db, 'tournaments', tournamentId, 'players');
+        const playersRef = collection(db, col('tournaments'), tournamentId, 'players');
         const q = query(playersRef, where('uid', '==', userId));
         const snapshot = await getDocs(q);
 

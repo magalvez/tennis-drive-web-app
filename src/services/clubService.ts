@@ -1,5 +1,7 @@
 import { addDoc, collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where, deleteField } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 export interface ScoringConfig {
     win: number;
@@ -41,9 +43,9 @@ export const createClub = async (data: Omit<ClubData, 'createdAt'>) => {
             }
         });
 
-        const docRef = await addDoc(collection(db, "clubs"), clubData);
+        const docRef = await addDoc(collection(db, col('clubs')), clubData);
 
-        const userRef = doc(db, "users", data.adminUid);
+        const userRef = doc(db, col('users'), data.adminUid);
         await updateDoc(userRef, {
             managedClubId: docRef.id
         });
@@ -57,7 +59,7 @@ export const createClub = async (data: Omit<ClubData, 'createdAt'>) => {
 
 export const getClubByAdmin = async (adminUid: string) => {
     try {
-        const q = query(collection(db, "clubs"), where("adminUid", "==", adminUid));
+        const q = query(collection(db, col('clubs')), where("adminUid", "==", adminUid));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
             const docData = snapshot.docs[0];
@@ -72,7 +74,7 @@ export const getClubByAdmin = async (adminUid: string) => {
 
 export const getClubById = async (id: string) => {
     try {
-        const docRef = doc(db, "clubs", id);
+        const docRef = doc(db, col('clubs'), id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             return { id: docSnap.id, ...docSnap.data() } as ClubData & { id: string };
@@ -86,7 +88,7 @@ export const getClubById = async (id: string) => {
 
 export const updateClub = async (id: string, data: Partial<ClubData>) => {
     try {
-        const docRef = doc(db, "clubs", id);
+        const docRef = doc(db, col('clubs'), id);
         await updateDoc(docRef, data);
     } catch (error) {
         console.error("Error updating club:", error);
@@ -96,7 +98,7 @@ export const updateClub = async (id: string, data: Partial<ClubData>) => {
 
 export const deleteClubEpaycoConfig = async (id: string) => {
     try {
-        const docRef = doc(db, "clubs", id);
+        const docRef = doc(db, col('clubs'), id);
         await updateDoc(docRef, { epaycoConfig: deleteField() });
     } catch (error) {
         console.error("Error deleting epayco config:", error);
@@ -106,7 +108,7 @@ export const deleteClubEpaycoConfig = async (id: string) => {
 
 export const getAllClubs = async () => {
     try {
-        const snapshot = await getDocs(collection(db, "clubs"));
+        const snapshot = await getDocs(collection(db, col('clubs')));
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClubData & { id: string }));
     } catch (error) {
         console.error("Error fetching all clubs:", error);

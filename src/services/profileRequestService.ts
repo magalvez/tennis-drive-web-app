@@ -13,6 +13,7 @@ import {
     writeBatch
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
 
 export interface CategoryRequest {
     id: string;
@@ -61,7 +62,7 @@ export const submitCategoryRequest = async (
     clubId: string
 ) => {
     try {
-        const requestsRef = collection(db, "profileChangeRequests");
+        const requestsRef = collection(db, col('profileChangeRequests'));
         await addDoc(requestsRef, {
             userId,
             userName,
@@ -82,7 +83,7 @@ export const submitCategoryRequest = async (
  * Subscribe to pending category requests for a specific club
  */
 export const subscribeToPendingRequests = (clubId: string, callback: (requests: CategoryRequest[]) => void) => {
-    const requestsRef = collection(db, "profileChangeRequests");
+    const requestsRef = collection(db, col('profileChangeRequests'));
     const q = query(
         requestsRef,
         where("clubId", "==", clubId),
@@ -107,7 +108,7 @@ export const approveCategoryRequest = async (request: CategoryRequest, adminId: 
         const batch = writeBatch(db);
 
         // 1. Update request status
-        const requestRef = doc(db, "profileChangeRequests", request.id);
+        const requestRef = doc(db, col('profileChangeRequests'), request.id);
         batch.update(requestRef, {
             status: 'approved',
             adminId,
@@ -115,7 +116,7 @@ export const approveCategoryRequest = async (request: CategoryRequest, adminId: 
         });
 
         // 2. Update user profile
-        const userRef = doc(db, "users", request.userId);
+        const userRef = doc(db, col('users'), request.userId);
         const userSnap = await getDoc(userRef);
         const userData = userSnap.data();
         const currentXP = userData?.sportsProfiles?.tennis?.points || 0;
@@ -144,7 +145,7 @@ export const approveCategoryRequest = async (request: CategoryRequest, adminId: 
  */
 export const rejectCategoryRequest = async (requestId: string, adminId: string, reason: string) => {
     try {
-        const requestRef = doc(db, "profileChangeRequests", requestId);
+        const requestRef = doc(db, col('profileChangeRequests'), requestId);
         await updateDoc(requestRef, {
             status: 'rejected',
             adminId,
@@ -159,9 +160,10 @@ export const rejectCategoryRequest = async (requestId: string, adminId: string, 
 
 import { getDocs, limit } from 'firebase/firestore';
 
+
 export const hasPendingRequest = async (userId: string) => {
     try {
-        const requestsRef = collection(db, "profileChangeRequests");
+        const requestsRef = collection(db, col('profileChangeRequests'));
         const q = query(
             requestsRef,
             where("userId", "==", userId),

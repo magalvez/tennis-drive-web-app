@@ -1,6 +1,8 @@
 import { doc, getDoc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { logManagerAction } from './managerService';
+import { col } from '../config/environment';
+
 
 export interface AppConfig {
     epaycoGlobalTestMode: boolean;
@@ -18,7 +20,7 @@ const CONFIG_DOC_ID = 'global_settings';
  */
 export const getAppConfig = async (): Promise<AppConfig | null> => {
     try {
-        const docRef = doc(db, "app_config", CONFIG_DOC_ID);
+        const docRef = doc(db, col('app_config'), CONFIG_DOC_ID);
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists()) {
@@ -47,7 +49,7 @@ export const getAppConfig = async (): Promise<AppConfig | null> => {
  */
 export const updateAppConfig = async (updates: Partial<AppConfig>, managerId: string) => {
     try {
-        const docRef = doc(db, "app_config", CONFIG_DOC_ID);
+        const docRef = doc(db, col('app_config'), CONFIG_DOC_ID);
         const finalUpdates = {
             ...updates,
             updatedAt: Timestamp.now(),

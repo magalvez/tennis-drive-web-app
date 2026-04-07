@@ -32,7 +32,8 @@ import {
     getTournamentPlayers,
     removePlayerFromTournament,
     updatePlayerInTournament,
-    updatePlayerSeed
+    updatePlayerSeed,
+    clearAllSeeds
 } from '../../../services/tournamentService';
 import {
     getDoublesTeams,
@@ -56,6 +57,8 @@ import PlayerStatsModal from '../../../components/admin/PlayerStatsModal';
 import { searchUsers } from '../../../services/userService';
 import type { UserData } from '../../../services/userService';
 import { Search, User } from 'lucide-react';
+import { col } from '../../../config/environment';
+
 
 const TournamentPlayersPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -102,6 +105,8 @@ const TournamentPlayersPage = () => {
         message: string;
         onConfirm: () => Promise<void>;
         type: 'danger' | 'warning' | 'info' | 'success';
+        confirmText?: string;
+        cancelText?: string;
     }>({ open: false, title: '', message: '', onConfirm: async () => { }, type: 'danger' });
 
     const [errorModal, setErrorModal] = useState<{
@@ -113,13 +118,22 @@ const TournamentPlayersPage = () => {
         setErrorModal({ open: true, message: msg });
     };
 
-    const showConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, type: 'danger' | 'warning' | 'info' | 'success' = 'danger') => {
+    const showConfirmation = (
+        title: string,
+        message: string,
+        onConfirm: () => Promise<void>,
+        type: 'danger' | 'warning' | 'info' | 'success' = 'danger',
+        confirmText?: string,
+        cancelText?: string
+    ) => {
         setConfirmModal({
             open: true,
             title,
             message,
             onConfirm,
-            type
+            type,
+            confirmText,
+            cancelText
         });
     };
 
@@ -276,14 +290,14 @@ const TournamentPlayersPage = () => {
             if (selectedModality === 'doubles') {
                 if (!newPlayer.player2Name.trim()) return;
 
-                const user1Ref = await addDoc(collection(db, 'users'), {
+                const user1Ref = await addDoc(collection(db, col('users')), {
                     displayName: newPlayer.name.trim(),
                     createdAt: Timestamp.now(),
                     isManual: true,
                     role: 'player',
                     sportsProfiles
                 });
-                const user2Ref = await addDoc(collection(db, 'users'), {
+                const user2Ref = await addDoc(collection(db, col('users')), {
                     displayName: newPlayer.player2Name.trim(),
                     createdAt: Timestamp.now(),
                     isManual: true,
@@ -309,12 +323,12 @@ const TournamentPlayersPage = () => {
                 const email = newPlayer.email?.trim();
 
                 if (email) {
-                    const q = query(collection(db, 'users'), where('email', '==', email));
+                    const q = query(collection(db, col('users')), where('email', '==', email));
                     const snap = await getDocs(q);
                     if (!snap.empty) {
                         userUid = snap.docs[0].id;
                     } else {
-                        const userRef = await addDoc(collection(db, 'users'), {
+                        const userRef = await addDoc(collection(db, col('users')), {
                             displayName: newPlayer.name.trim(),
                             email: email,
                             createdAt: Timestamp.now(),
@@ -325,7 +339,7 @@ const TournamentPlayersPage = () => {
                         userUid = userRef.id;
                     }
                 } else {
-                    const userRef = await addDoc(collection(db, 'users'), {
+                    const userRef = await addDoc(collection(db, col('users')), {
                         displayName: newPlayer.name.trim(),
                         createdAt: Timestamp.now(),
                         isManual: true,
@@ -390,8 +404,8 @@ const TournamentPlayersPage = () => {
                     if (selectedModality === 'doubles') {
                         const p1Name = `Rnd ${rnd} A`;
                         const p2Name = `Rnd ${rnd} B`;
-                        const u1 = await addDoc(collection(db, 'users'), { displayName: p1Name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
-                        const u2 = await addDoc(collection(db, 'users'), { displayName: p2Name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
+                        const u1 = await addDoc(collection(db, col('users')), { displayName: p1Name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
+                        const u2 = await addDoc(collection(db, col('users')), { displayName: p2Name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
                         await createDoublesTeam(id, {
                             player1Uid: u1.id, player1Name: p1Name,
                             player2Uid: u2.id, player2Name: p2Name,
@@ -399,7 +413,7 @@ const TournamentPlayersPage = () => {
                         } as any);
                     } else {
                         const name = `Test Player ${rnd}`;
-                        const u = await addDoc(collection(db, 'users'), { displayName: name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
+                        const u = await addDoc(collection(db, col('users')), { displayName: name, isManual: true, role: 'player', sportsProfiles, createdAt: Timestamp.now() });
                         await addPlayerToTournament(id, { name, uid: u.id, category: catToUse, registrationStatus: 'approved', isManual: true });
                     }
                 })());
@@ -509,22 +523,82 @@ const TournamentPlayersPage = () => {
 
     const handleAutoSeed = async () => {
         if (!id || processing) return;
-        setProcessing(true);
-        try {
-            const cat = selectedCategory as TournamentCategory;
-            if (selectedModality === 'doubles') {
-                await autoSeedDoublesTeams(id, cat);
-            } else {
-                await autoSeedPlayers(id, cat);
+
+        const cat = selectedCategory as TournamentCategory;
+        const isDoubles = selectedModality === 'doubles';
+        const items = isDoubles ? doublesTeams : players;
+
+        const filteredItems = !cat
+            ? items
+            : items.filter((item: any) => item.category?.toLowerCase() === cat.toLowerCase());
+
+        const unseededCount = filteredItems.filter((item: any) => !item.seed || item.seedType !== 'manual').length;
+
+        const proceed = async () => {
+            setProcessing(true);
+            try {
+                if (isDoubles) {
+                    await autoSeedDoublesTeams(id, cat);
+                } else {
+                    await autoSeedPlayers(id, cat);
+                }
+                await loadData();
+                showConfirmation(t('common.success'), t('admin.tournaments.players.successAutoSeed'), async () => { }, 'success');
+            } catch (error) {
+                console.error(error);
+                showError("Failed to auto-seed");
+            } finally {
+                setProcessing(false);
             }
-            await loadData();
-            showConfirmation(t('common.success'), t('admin.tournaments.players.successAutoSeed'), async () => { }, 'success');
-        } catch (error) {
-            console.error(error);
-            showError("Failed to auto-seed");
-        } finally {
-            setProcessing(false);
+        };
+
+        if (unseededCount > 0) {
+            showConfirmation(
+                t('admin.tournaments.players.autoSeedTitle'),
+                t('admin.tournaments.players.unseededWarning', { count: unseededCount }),
+                proceed,
+                'warning',
+                t('admin.tournaments.players.assignSeedsBtn')
+            );
+        } else {
+            showConfirmation(
+                t('admin.tournaments.players.autoSeedTitle'),
+                cat
+                    ? (isDoubles ? t('admin.tournaments.players.autoSeedConfirmCatDoubles', { category: cat }) : t('admin.tournaments.players.autoSeedConfirmCat', { category: cat }))
+                    : (isDoubles ? t('admin.tournaments.players.autoSeedConfirmDoubles') : t('admin.tournaments.players.autoSeedConfirm')),
+                proceed,
+                'info',
+                t('admin.tournaments.players.assignSeedsBtn')
+            );
         }
+    };
+
+    const handleClearSeeds = async () => {
+        if (!id || processing) return;
+
+        const cat = selectedCategory as TournamentCategory;
+
+        showConfirmation(
+            t('admin.tournaments.tools.clearSeeds'),
+            t('admin.tournaments.tools.clearSeedsConfirm', { 
+                category: !cat || cat.toLowerCase() === 'all' ? t('common.all') : t(`admin.tournaments.categories.${cat.toLowerCase()}`) 
+            }),
+            async () => {
+                setProcessing(true);
+                try {
+                    await clearAllSeeds(id, selectedModality as any, cat);
+                    await loadData();
+                    showConfirmation(t('common.success'), t('admin.tournaments.tools.clearSeedsSuccess'), async () => { }, 'success');
+                } catch (error) {
+                    console.error(error);
+                    showError("Failed to clear seeds");
+                } finally {
+                    setProcessing(false);
+                }
+            },
+            'warning',
+            t('common.confirm')
+        );
     };
 
     const handleRecordPayment = async (e: React.FormEvent) => {
@@ -703,8 +777,20 @@ const TournamentPlayersPage = () => {
     };
 
     const filteredItems = selectedModality === 'doubles'
-        ? doublesTeams.filter(t => t.category === selectedCategory)
-        : players.filter(p => p.category === selectedCategory);
+        ? doublesTeams.filter(t => t.category === selectedCategory).sort((a, b) => {
+            const seedA = a.seed ?? Infinity;
+            const seedB = b.seed ?? Infinity;
+            if (seedA !== seedB) return seedA - seedB;
+            const nameA = a.teamName || `${a.player1Name} / ${a.player2Name}`;
+            const nameB = b.teamName || `${b.player1Name} / ${b.player2Name}`;
+            return nameA.localeCompare(nameB);
+        })
+        : players.filter(p => p.category === selectedCategory).sort((a, b) => {
+            const seedA = a.seed ?? Infinity;
+            const seedB = b.seed ?? Infinity;
+            if (seedA !== seedB) return seedA - seedB;
+            return a.name.localeCompare(b.name);
+        });
 
     const currentPending = selectedModality === 'doubles'
         ? doublesTeams.filter(t => t.paymentStatus === 'unpaid' && !!t.paymentProofUrl)
@@ -729,7 +815,8 @@ const TournamentPlayersPage = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button onClick={handleCleanup} className="p-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl border border-red-500/10 transition-all"><Trash2 size={24} /></button>
-                    <button onClick={() => setShowRandomModal(true)} className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"><Users size={24} /></button>
+                    <button onClick={handleClearSeeds} title={t('admin.tournaments.tools.clearSeeds')} className="p-4 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-2xl border border-orange-500/10 transition-all"><RefreshCw size={24} /></button>
+                    <button onClick={() => setShowRandomModal(true)} title={t('admin.tournaments.tools.testPlayers')} className="p-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/10 transition-all"><Users size={24} /></button>
                     {selectedModality === 'singles' && (
                         <button onClick={() => setShowSelectRegisteredModal(true)} className="bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 border border-white/10">
                             <Search size={20} />
@@ -828,7 +915,11 @@ const TournamentPlayersPage = () => {
                                             <span className="text-[10px] text-tennis-green uppercase font-black">
                                                 {item.category ? t(`admin.tournaments.categories.${(item.category as string).toLowerCase()}`) : ''}
                                             </span>
-                                            {item.seed && <span className="text-[10px] text-blue-400 uppercase font-black">{t('bracket.seed')} #{item.seed}</span>}
+                                            {item.seed && (
+                                                <span className="text-[10px] text-blue-400 uppercase font-black">
+                                                    {t('bracket.seed')} #{item.seed} {item.seedType ? `(${t(`admin.tournaments.players.status.${item.seedType.toLowerCase()}`)})` : ''}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1068,7 +1159,7 @@ const TournamentPlayersPage = () => {
                         <div className="flex gap-4">
                             {confirmModal.type !== 'success' && (
                                 <button onClick={() => setConfirmModal({ ...confirmModal, open: false })} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-gray-400 font-black rounded-2xl transition-all uppercase tracking-widest border border-white/10">
-                                    {t('common.cancel')}
+                                    {confirmModal.cancelText || t('common.cancel')}
                                 </button>
                             )}
                             <button
@@ -1083,7 +1174,7 @@ const TournamentPlayersPage = () => {
                                 className={`flex-1 py-4 ${confirmModal.type === 'success' ? 'bg-tennis-green text-tennis-dark' : 'bg-red-500 text-white'} font-black rounded-2xl transition-all uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 disabled:opacity-50`}
                             >
                                 {processing && confirmModal.type !== 'success' && <RefreshCw size={20} className="animate-spin" />}
-                                {confirmModal.type === 'success' ? t('common.close') : t('common.confirm')}
+                                {confirmModal.type === 'success' ? t('common.close') : (confirmModal.confirmText || t('common.confirm'))}
                             </button>
                         </div>
                     </div>

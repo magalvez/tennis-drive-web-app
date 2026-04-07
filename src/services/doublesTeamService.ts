@@ -16,6 +16,8 @@ import {
     where
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { col } from '../config/environment';
+
 
 // ============================================================================
 // INTERFACES
@@ -32,6 +34,7 @@ export interface DoublesTeam {
     teamName?: string;
     category?: string;
     seed?: number;
+    seedType?: 'manual' | 'automatic';
     group?: string;
     status: DoublesTeamStatus;
     registrationStatus?: 'approved' | 'pending' | 'rejected';
@@ -74,7 +77,7 @@ export const createDoublesTeam = async (
         };
 
         const docRef = await addDoc(
-            collection(db, 'tournaments', tournamentId, 'doublesTeams'),
+            collection(db, col('tournaments'), tournamentId, 'doublesTeams'),
             teamData
         );
 
@@ -93,7 +96,7 @@ export const getDoublesTeams = async (
 ): Promise<DoublesTeam[]> => {
     try {
         const q = query(
-            collection(db, 'tournaments', tournamentId, 'doublesTeams'),
+            collection(db, col('tournaments'), tournamentId, 'doublesTeams'),
             orderBy('addedAt', 'desc')
         );
         const snapshot = await getDocs(q);
@@ -116,7 +119,7 @@ export const getDoublesTeamsByCategory = async (
 ): Promise<DoublesTeam[]> => {
     try {
         const q = query(
-            collection(db, 'tournaments', tournamentId, 'doublesTeams'),
+            collection(db, col('tournaments'), tournamentId, 'doublesTeams'),
             where('category', '==', category),
             orderBy('addedAt', 'desc')
         );
@@ -162,7 +165,7 @@ export const getDoublesTeamById = async (
     teamId: string
 ): Promise<DoublesTeam | null> => {
     try {
-        const docRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
+        const docRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
         const { getDoc } = await import('firebase/firestore');
         const docSnap = await getDoc(docRef);
 
@@ -181,13 +184,13 @@ export const getDoublesTeamById = async (
  */
 export const getClubDoublesTeamsCount = async (clubId: string): Promise<number> => {
     try {
-        const tournamentsRef = collection(db, 'tournaments');
+        const tournamentsRef = collection(db, col('tournaments'));
         const q = query(tournamentsRef, where('clubId', '==', clubId));
         const snapshot = await getDocs(q);
 
         let totalCount = 0;
         for (const tDoc of snapshot.docs) {
-            const doublesRef = collection(db, 'tournaments', tDoc.id, 'doublesTeams');
+            const doublesRef = collection(db, col('tournaments'), tDoc.id, 'doublesTeams');
             const dSnapshot = await getDocs(doublesRef);
             totalCount += dSnapshot.size;
         }
@@ -207,7 +210,7 @@ export const updateDoublesTeam = async (
     data: Partial<DoublesTeam>
 ): Promise<void> => {
     try {
-        const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
+        const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
         await updateDoc(teamRef, data);
     } catch (error) {
         console.error('Error updating doubles team:', error);
@@ -223,7 +226,7 @@ export const removeDoublesTeam = async (
     teamId: string
 ): Promise<void> => {
     try {
-        const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
+        const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
         const { deleteDoc } = await import('firebase/firestore');
         await deleteDoc(teamRef);
     } catch (error) {
@@ -257,15 +260,20 @@ export const autoSeedDoublesTeams = async (
         // Filter to approved teams only
         teams = teams.filter(t => t.registrationStatus !== 'rejected');
 
-        // Fetch combined points for each team
+        // Reserved seeds from manual assignment
+        const manuallySeeded = teams.filter(t => t.seed && t.seedType === 'manual');
+        const usedSeeds = new Set(manuallySeeded.map(t => t.seed!));
+        const teamsToAutoSeed = teams.filter(t => !t.seed || t.seedType !== 'manual');
+
+        // Fetch combined points for teams to auto-seed
         const { getDoc } = await import('firebase/firestore');
         const teamsWithPoints = await Promise.all(
-            teams.map(async (team) => {
+            teamsToAutoSeed.map(async (team) => {
                 let combinedPoints = 0;
 
                 // Get player 1 points
                 if (team.player1Uid && !team.isManual) {
-                    const user1Doc = await getDoc(doc(db, 'users', team.player1Uid));
+                    const user1Doc = await getDoc(doc(db, col('users'), team.player1Uid));
                     if (user1Doc.exists()) {
                         combinedPoints += user1Doc.data()?.clubs?.[tournament.clubId!]?.points ?? 0;
                     }
@@ -273,7 +281,7 @@ export const autoSeedDoublesTeams = async (
 
                 // Get player 2 points
                 if (team.player2Uid && !team.isManual) {
-                    const user2Doc = await getDoc(doc(db, 'users', team.player2Uid));
+                    const user2Doc = await getDoc(doc(db, col('users'), team.player2Uid));
                     if (user2Doc.exists()) {
                         combinedPoints += user2Doc.data()?.clubs?.[tournament.clubId!]?.points ?? 0;
                     }
@@ -289,9 +297,15 @@ export const autoSeedDoublesTeams = async (
         // Batch update seeds
         const { writeBatch } = await import('firebase/firestore');
         const batch = writeBatch(db);
-        sorted.forEach((team, idx) => {
-            const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', team.id);
-            batch.update(teamRef, { seed: idx + 1 });
+        let currentSeed = 1;
+        sorted.forEach((team) => {
+            while (usedSeeds.has(currentSeed)) {
+                currentSeed++;
+            }
+            const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', team.id);
+            batch.update(teamRef, { seed: currentSeed, seedType: 'automatic' });
+            usedSeeds.add(currentSeed);
+            currentSeed++;
         });
 
         await batch.commit();
@@ -308,11 +322,12 @@ export const autoSeedDoublesTeams = async (
 export const updateDoublesTeamSeed = async (
     tournamentId: string,
     teamId: string,
-    seed: number | null
+    seed: number | null,
+    seedType: 'manual' | 'automatic' = 'manual'
 ): Promise<boolean> => {
     try {
-        const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
-        await updateDoc(teamRef, { seed });
+        const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
+        await updateDoc(teamRef, { seed, seedType: seed === null ? null : seedType });
         return true;
     } catch (error) {
         console.error('Error updating doubles team seed:', error);
@@ -415,7 +430,7 @@ export const getWaitingRoomPlayers = async (
     category?: string
 ): Promise<DoublesTeam[]> => {
     try {
-        const teamsRef = collection(db, "tournaments", tournamentId, "doublesTeams");
+        const teamsRef = collection(db, col('tournaments'), tournamentId, "doublesTeams");
         const q = query(teamsRef,
             where("inWaitingRoom", "==", true),
             where("status", "==", "pending_partner")
@@ -476,7 +491,7 @@ export const withdrawFromDoubles = async (
     withdrawerName: string
 ): Promise<void> => {
     try {
-        const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
+        const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
         const { getDoc, deleteDoc } = await import('firebase/firestore');
         const teamSnap = await getDoc(teamRef);
 
@@ -525,7 +540,7 @@ export const checkInDoublesPlayer = async (
     value: boolean = true
 ): Promise<void> => {
     try {
-        const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
+        const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
         const { getDoc } = await import('firebase/firestore');
         const teamSnap = await getDoc(teamRef);
 
@@ -559,7 +574,7 @@ export const rejectDoublesTeamRegistration = async (
     reason: string
 ) => {
     try {
-        const teamRef = doc(db, 'tournaments', tournamentId, 'doublesTeams', teamId);
+        const teamRef = doc(db, col('tournaments'), tournamentId, 'doublesTeams', teamId);
         await updateDoc(teamRef, {
             paymentStatus: 'unpaid' as const,
             paymentProofRejected: true,

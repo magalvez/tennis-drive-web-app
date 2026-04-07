@@ -2,6 +2,8 @@ import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestor
 import { useEffect, useState } from 'react';
 import { db } from '../config/firebase';
 import type { TournamentData } from '../services/types';
+import { col } from '../config/environment';
+
 
 export interface Tournament extends TournamentData {
     id: string;
@@ -15,12 +17,12 @@ export const useTournaments = (clubId?: string) => {
         let q;
         if (clubId) {
             q = query(
-                collection(db, "tournaments"),
+                collection(db, col('tournaments')),
                 where("clubId", "==", clubId),
                 orderBy("createdAt", "desc")
             );
         } else {
-            q = query(collection(db, "tournaments"), orderBy("createdAt", "desc"));
+            q = query(collection(db, col('tournaments')), orderBy("createdAt", "desc"));
         }
 
         const unsubscribe = onSnapshot(q, (querySnapshot) => {

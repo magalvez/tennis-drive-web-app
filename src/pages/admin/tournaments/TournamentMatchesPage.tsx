@@ -98,6 +98,10 @@ const TournamentMatchesPage = () => {
         onConfirm: (value: string) => Promise<void>;
     }>({ open: false, title: '', description: '', defaultValue: '', onConfirm: async () => { } });
     const [inputValue, setInputValue] = useState('');
+    const [seedingModal, setSeedingModal] = useState<{
+        open: boolean;
+        onSelect: (logic: 'standard' | 'best_of_groups') => void;
+    }>({ open: false, onSelect: () => { } });
 
     // Admin Tools State
     const [isAdminToolsOpen, setIsAdminToolsOpen] = useState(false);
@@ -244,6 +248,18 @@ const TournamentMatchesPage = () => {
 
     const handleGenerateKnockout = async () => {
         if (!id || processing) return;
+
+        setSeedingModal({
+            open: true,
+            onSelect: (logic) => {
+                setSeedingModal(prev => ({ ...prev, open: false }));
+                proceedWithGenerateKnockout(logic);
+            }
+        });
+    };
+
+    const proceedWithGenerateKnockout = async (seedingLogic: 'standard' | 'best_of_groups' = 'standard') => {
+        if (!id) return;
         setProcessing(true);
         try {
             const cat = selectedCategory === '' ? undefined : selectedCategory;
@@ -261,7 +277,6 @@ const TournamentMatchesPage = () => {
             }
 
             // Fetch full player objects for qualifiers using their specific document ID (q.id)
-            // This prevents picking up multiple registrations
             const allPlayers = await getTournamentPlayers(id);
             const qualifiedPlayerIds = qualifiers.map(q => q.id);
             const qualifiedPlayers = allPlayers.filter(p =>
@@ -277,11 +292,22 @@ const TournamentMatchesPage = () => {
                 items = allTeams.filter(t => qualifiedPlayerIds.includes(t.id));
             }
 
-            await generateMainDraw(id, items, cat, selectedModality);
+            // Map qualifier performance data (wins/gamesFinal) to items
+            const itemsWithStats = items.map(item => {
+                const q = qualifiers.find(qual => qual.id === item.id);
+                return {
+                    ...item,
+                    wins: q?.wins || 0,
+                    gamesFinal: q?.gamesFinal || 0
+                };
+            });
+
+            await generateMainDraw(id, itemsWithStats, cat, selectedModality, seedingLogic);
             await loadData();
             setActiveTab('knockout');
             showConfirmation(t('common.success'), t('bracket.generateSuccess'), async () => { }, 'success');
         } catch (error) {
+            console.error(error);
             showError(t('bracket.generateError'));
         } finally {
             setProcessing(false);
@@ -1336,6 +1362,69 @@ const TournamentMatchesPage = () => {
                                     {processing ? <RefreshCw className="animate-spin" size={20} /> : t('common.confirm')}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Seeding Strategy Modal */}
+            {
+                seedingModal.open && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-fade-in no-print">
+                        <div className="glass max-w-lg w-full p-8 rounded-[32px] border-white/10 space-y-6 shadow-2xl">
+                            <div className="text-center space-y-2">
+                                <div className="w-16 h-16 rounded-3xl bg-tennis-green/10 text-tennis-green flex items-center justify-center mx-auto mb-4">
+                                    <Trophy size={32} />
+                                </div>
+                                <h3 className="text-white text-2xl font-black uppercase tracking-tight">{t('bracket.seeding.title')}</h3>
+                                <p className="text-gray-400 text-sm">{t('bracket.seeding.message')}</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <button
+                                    onClick={() => seedingModal.onSelect('standard')}
+                                    className="w-full p-6 rounded-[24px] bg-white/5 hover:bg-white/10 border border-white/5 hover:border-tennis-green/30 text-left transition-all group"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <p className="text-white font-black uppercase tracking-tight group-hover:text-tennis-green transition-colors">
+                                                {t('bracket.seeding.standard')}
+                                            </p>
+                                            <p className="text-gray-500 text-xs font-bold leading-relaxed">
+                                                {t('bracket.seeding.standardDesc')}
+                                            </p>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-500 group-hover:bg-tennis-green group-hover:text-tennis-dark transition-all">
+                                            <List size={20} />
+                                        </div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => seedingModal.onSelect('best_of_groups')}
+                                    className="w-full p-6 rounded-[24px] bg-white/5 hover:bg-white/10 border border-white/5 hover:border-tennis-green/30 text-left transition-all group"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <p className="text-white font-black uppercase tracking-tight group-hover:text-tennis-green transition-colors">
+                                                {t('bracket.seeding.best_of_groups')}
+                                            </p>
+                                            <p className="text-gray-500 text-xs font-bold leading-relaxed">
+                                                {t('bracket.seeding.best_of_groupsDesc')}
+                                            </p>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-500 group-hover:bg-tennis-green group-hover:text-tennis-dark transition-all">
+                                            <Zap size={20} />
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => setSeedingModal(prev => ({ ...prev, open: false }))}
+                                className="w-full py-4 rounded-xl text-gray-500 font-bold uppercase tracking-widest text-[10px] hover:text-white transition-colors"
+                            >
+                                {t('common.cancel')}
+                            </button>
                         </div>
                     </div>
                 )
